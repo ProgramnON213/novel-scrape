@@ -16,3 +16,9 @@ Thumbs.db
 # Editor directories
 .vscode/
 .idea/
+
+# Local backup and scratch files
+backup/
+scraping_log.txt
+scratch_processed_urls.json
+
