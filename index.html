@@ -11,8 +11,40 @@
 </head>
 <body>
   <header>
-    <h1>Novel Search</h1>
+    <div class="header-top">
+      <h1>Novel Search</h1>
+      <div class="header-controls">
+        <!-- Theme Switcher -->
+        <div class="theme-switcher" title="Switch theme">
+          <button class="theme-pill active" id="theme-midnight" data-theme="theme-midnight">🌌 Midnight</button>
+          <button class="theme-pill" id="theme-sakura" data-theme="theme-sakura">🌸 Sakura</button>
+          <button class="theme-pill" id="theme-cyberpunk" data-theme="theme-cyberpunk">📟 Neon</button>
+        </div>
+        <!-- Import/Export -->
+        <div class="backup-controls">
+          <button id="exportBtn" class="backup-btn" title="Export your library backup">⬆ Export</button>
+          <label id="importLabel" class="backup-btn" title="Import a library backup">⬇ Import
+            <input type="file" id="importFile" accept=".json" hidden>
+          </label>
+        </div>
+      </div>
+    </div>
+
     <input type="text" id="searchInput" placeholder="Search for novels by title, author, genre...">
+
+    <!-- Library Filter Pills -->
+    <div class="library-filter-bar">
+      <span class="filter-label">Library:</span>
+      <div class="library-pills">
+        <button class="lib-pill active" data-lib="all">All</button>
+        <button class="lib-pill" data-lib="favorite">❤ Favorites</button>
+        <button class="lib-pill" data-lib="Reading">Reading</button>
+        <button class="lib-pill" data-lib="Plan to Read">Plan to Read</button>
+        <button class="lib-pill" data-lib="Completed">Completed</button>
+        <button class="lib-pill" data-lib="Dropped">Dropped</button>
+      </div>
+    </div>
+
     <div class="filter-bar">
       <button id="tagToggleBtn" class="tag-toggle-btn">
         <span id="tagToggleIcon">▾</span> Filter by Tags

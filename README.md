@@ -1,4 +1,4 @@
-﻿# 📚 Novel Search
+# 📚 Novel Search
 
 A sleek, dark-themed static web app for browsing and downloading a personal light novel / web novel library. Built with vanilla HTML, CSS, and JavaScript, bundled by Vite, and deployed automatically to GitHub Pages.
 
@@ -16,6 +16,11 @@ A sleek, dark-themed static web app for browsing and downloading a personal ligh
 | **Glassmorphism UI** | Dark background with purple / orange gradient accents, backdrop blur effects |
 | **Responsive** | Works on mobile and desktop; modal collapses to a single column on small screens |
 | **Zero runtime deps** | No frameworks, no external JS libraries — Vite is a dev/build tool only |
+| **❤️ Favorites & Reading Status** | Mark novels as favorites and categorize them (Reading / Plan to Read / Completed / Dropped); filter the grid by library category via pill buttons |
+| **🔖 Volume Progress Tracking** | Check off individual volumes as read; progress shown as `X/Y read` in the modal and on each card |
+| **🎨 Themes** | Three built-in themes — *Midnight Abyss* (default), *Sakura Cozy*, *Cyberpunk Neon* — switchable from the header |
+| **💾 Backup Export / Import** | One-click export of all library data (favorites, statuses, progress, theme) as a `.json` file; re-import on any device. Keyed by novel ID so backups stay valid even when `data.json` changes |
+| **📌 Reading-first sort** | Novels with **"Reading"** status always appear at the top of the grid |
 
 ---
 
@@ -159,12 +164,15 @@ All design tokens live in the `:root` block of `style.css`:
 
 ## 🏗️ Architecture Notes for AI Agents
 
-- **`main.js` is a single module** — no bundler-split chunks or imports. All logic lives here: `init()`, `buildTagSystem()`, `cycleTagState()`, `applyFilters()`, `renderGrid()`, `openModal()`.
+- **`main.js` is a single module** — no bundler-split chunks or imports. All logic lives here: `init()`, `buildTagSystem()`, `cycleTagState()`, `applyFilters()`, `renderGrid()`, `openModal()`, `exportBackup()`, `importBackup()`.
 - **Data flow:** `fetch(data.json)` → `novelsData[]` → `buildTagSystem()` populates `tagStates{}` → `applyFilters()` recomputes the filtered list → `renderGrid()` re-renders the DOM.
 - **Tag state machine:** each genre cycles `neutral → include → exclude → neutral` on click. Filtering requires ALL included genres and NO excluded genres.
 - **Modal is a singleton** — `openModal(novel)` rebuilds `modalBody.innerHTML` each time and re-attaches copy-button listeners.
-- **No state management library** — mutable module-level variables (`novelsData`, `tagStates`) serve as the store.
+- **No state management library** — mutable module-level variables (`novelsData`, `tagStates`, `activeLibFilter`) serve as the store.
 - **`import.meta.env.BASE_URL`** is used when fetching `data.json`, so it works correctly under any Vite `base` path.
+- **Personalization state** lives in a single `settings` object (`LS_SETTINGS_KEY = 'novel_settings'`) and is persisted to `localStorage`. All user data is keyed by `novel.id` (string) so it remains valid regardless of changes to `data.json`.
+- **Themes** are implemented as CSS classes on `<body>` (`.theme-sakura`, `.theme-cyberpunk`). Default *Midnight Abyss* has no class — all variables are defined on `:root`. Adding a theme class overrides them.
+- **Backup schema** is a plain JSON object with `version`, `library`, `progress`, and `theme` keys. The importer validates for `library` and `progress` keys before applying.
 
 ---
 
