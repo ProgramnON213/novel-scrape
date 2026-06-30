@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Novel Search</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Novel Search</h1>
+    <input type="text" id="searchInput" placeholder="Search for novels by title, author, genre...">
+    <div class="filter-bar">
+      <button id="tagToggleBtn" class="tag-toggle-btn">
+        <span id="tagToggleIcon">▾</span> Filter by Tags
+        <span id="activeTagCount" class="active-tag-count hidden">0</span>
+      </button>
+      <button id="clearTagsBtn" class="clear-tags-btn hidden">Clear All</button>
+    </div>
+    <div id="tagPanel" class="tag-panel">
+      <div id="tagContainer" class="tag-container"></div>
+    </div>
+  </header>
+
+  <main>
+    <div id="novelGrid" class="novel-grid"></div>
+  </main>
+
+  <div id="novelModal" class="modal">
+    <div class="modal-content glass">
+      <span class="close-btn">&times;</span>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
