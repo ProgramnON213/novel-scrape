@@ -377,7 +377,6 @@ h1 {
 .tag-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
   padding: 0.35rem 0.85rem;
   border-radius: 50px;
   font-size: 0.82rem;
@@ -386,6 +385,18 @@ h1 {
   border: 1px solid transparent;
   transition: all 0.2s ease;
   user-select: none;
+  white-space: nowrap;
+}
+
+.tag-pill::before {
+  content: '';
+  display: inline-block;
+  width: 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  text-align: center;
+  overflow: hidden;
 }
 
 .tag-pill[data-state="neutral"] {
@@ -408,8 +419,6 @@ h1 {
 
 .tag-pill[data-state="include"]::before {
   content: '✓';
-  font-size: 0.75rem;
-  font-weight: 700;
 }
 
 .tag-pill[data-state="exclude"] {
@@ -421,8 +430,6 @@ h1 {
 
 .tag-pill[data-state="exclude"]::before {
   content: '✕';
-  font-size: 0.75rem;
-  font-weight: 700;
 }
 
 /* ============================================================
