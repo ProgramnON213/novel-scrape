@@ -433,6 +433,19 @@ h1 {
 }
 
 /* ============================================================
+   RESULTS SUMMARY
+   ============================================================ */
+.results-summary {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0.6rem 2rem 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+  min-height: 1.4em; /* prevent layout shift when empty */
+}
+
+/* ============================================================
    NOVEL GRID
    ============================================================ */
 .novel-grid {

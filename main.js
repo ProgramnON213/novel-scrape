@@ -38,6 +38,7 @@ const tagPanel        = document.getElementById('tagPanel');
 const tagContainer    = document.getElementById('tagContainer');
 const activeTagCount  = document.getElementById('activeTagCount');
 const clearTagsBtn    = document.getElementById('clearTagsBtn');
+const resultsSummary  = document.getElementById('resultsSummary');
 const exportBtn       = document.getElementById('exportBtn');
 const importFile      = document.getElementById('importFile');
 const libPills        = document.querySelectorAll('.lib-pill');
@@ -229,6 +230,19 @@ function applyFilters() {
    ============================================================ */
 function renderGrid(novels) {
   grid.innerHTML = '';
+
+  // --- results summary ---
+  const totalTiles   = novels.length;
+  const totalVolumes = novels.reduce((sum, n) => sum + (parseInt(n.volumesCount, 10) || 0), 0);
+  if (totalTiles === 0) {
+    resultsSummary.textContent = '';
+  } else {
+    const titleWord  = totalTiles   === 1 ? 'title'  : 'titles';
+    const volumeWord = totalVolumes === 1 ? 'volume' : 'volumes';
+    resultsSummary.textContent =
+      `Showing ${totalTiles.toLocaleString()} ${titleWord} · ${totalVolumes.toLocaleString()} ${volumeWord} total`;
+  }
+
   if (novels.length === 0) {
     grid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 4rem 0;">No novels found matching your filters.</p>';
     return;
