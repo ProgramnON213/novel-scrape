@@ -166,9 +166,9 @@ To sync your library across devices securely without creating a password-based a
    In your repository root, create a `.env` file (or set GitHub Repository Secrets for automatic deployments) containing:
    ```env
    VITE_SUPABASE_URL=your_supabase_project_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   VITE_SUPABASE_ANON_KEY=your_supabase_publishable_key
    ```
-   *Note: If no environment variables are present at build time, users can still input their credentials in the **Developer Credentials** panel inside the app's Sync menu.*
+   *Note: `VITE_SUPABASE_ANON_KEY` represents your Supabase project's client-side **Publishable API Key** (also referred to as the anon key).*
 4. **Link Devices**:
    - Open **Sync** on one device and click **Generate New Sync Key** (which will display a Sync Key and QR Code).
    - Open the app on another device, click **Sync**, and scan the QR code (using camera stream or by uploading a screenshot of it), or paste the plain text key.

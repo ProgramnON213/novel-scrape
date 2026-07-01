@@ -975,7 +975,7 @@ CREATE POLICY "Allow anon update" ON public.sync_data FOR UPDATE USING (true);</
         
         <div class="sync-instruction-step">
           <strong>3. Enter Credentials</strong>
-          Copy your project's <strong>Project URL</strong> and <strong>Anon Key</strong> (found in Settings > API), and paste them into the <strong>Developer Credentials</strong> panel below.
+          Copy your project's <strong>Project URL</strong> and <strong>Anon / Publishable Key</strong> (found in Settings > API), and paste them into the <strong>Developer Credentials</strong> panel below.
         </div>
       </div>
     </div>
@@ -1131,7 +1131,7 @@ function renderDevPanel() {
         <label>Custom Supabase URL
           <input type="text" id="customSupabaseUrl" class="sync-input" value="${escapeAttr(settings.customSupabaseUrl)}" placeholder="https://..." />
         </label>
-        <label>Custom Supabase Anon Key
+        <label>Custom Supabase Publishable Key
           <input type="password" id="customSupabaseAnonKey" class="sync-input" value="${escapeAttr(settings.customSupabaseAnonKey)}" placeholder="eyJhbG..." />
         </label>
         <button id="saveDevConfigBtn" class="sync-btn-secondary">Save Config</button>
