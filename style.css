@@ -358,7 +358,8 @@ h1 {
 }
 
 .tag-panel.open {
-  max-height: 400px;
+  max-height: 300px;
+  overflow-y: auto;
   padding: 0.5rem 0;
 }
 
@@ -978,4 +979,105 @@ h1 {
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   RESPONSIVE DESIGN (MEDIA QUERIES)
+   ============================================================ */
+
+@media (max-width: 768px) {
+  header {
+    padding: 1.25rem 1rem 1rem;
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 600px) {
+  h1 {
+    font-size: 2.2rem;
+  }
+
+  .library-filter-bar {
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .library-pills {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    padding: 0.5rem 0.25rem;
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .library-pills::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+
+  .lib-pill {
+    flex-shrink: 0;
+  }
+
+  .results-summary {
+    padding: 0.6rem 1rem 0;
+  }
+
+  .novel-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .novel-card {
+    padding: 0.75rem;
+    gap: 0.6rem;
+  }
+
+  .novel-card img {
+    height: 190px;
+  }
+
+  .novel-title {
+    font-size: 0.95rem;
+  }
+
+  .novel-meta {
+    font-size: 0.75rem;
+  }
+
+  .modal-content.glass {
+    padding: 1.25rem;
+  }
+
+  .close-btn {
+    top: 1rem;
+    right: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .volume-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+    padding: 0.75rem;
+  }
+
+  .vol-left {
+    width: 100%;
+  }
+
+  .volume-links {
+    justify-content: flex-end;
+  }
+
+  .copy-actions {
+    flex-direction: column;
+    gap: 0.6rem;
+  }
 }
