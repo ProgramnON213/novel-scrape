@@ -16,5 +16,8 @@
   "type": "module",
   "devDependencies": {
     "vite": "^8.1.0"
+  },
+  "dependencies": {
+    "jsqr": "^1.4.0"
   }
 }

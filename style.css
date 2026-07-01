@@ -1289,3 +1289,151 @@ h1 {
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+
+/* QR Scanning UI */
+.scanner-video-container {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  margin: 1.5rem auto;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--accent-primary);
+  box-shadow: 0 0 15px rgba(138, 43, 226, 0.4);
+  background: #000;
+  display: none;
+}
+
+.scanner-video-container.active {
+  display: block;
+}
+
+.scanner-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scanner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 40px solid rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.scanner-laser {
+  position: absolute;
+  top: 40px;
+  left: 40px;
+  right: 40px;
+  height: 2px;
+  background-color: #00ff00;
+  box-shadow: 0 0 8px #00ff00;
+  animation: scanning 2s linear infinite;
+}
+
+@keyframes scanning {
+  0% { top: 40px; }
+  50% { top: 220px; }
+  100% { top: 40px; }
+}
+
+/* Instructions UI */
+.sync-instructions-panel {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--card-border);
+  padding-top: 1rem;
+  text-align: left;
+}
+
+.sync-instructions-toggle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0;
+}
+
+.sync-instructions-toggle:hover {
+  color: var(--text-main);
+}
+
+.sync-instructions-content {
+  display: none;
+  margin-top: 1rem;
+  flex-direction: column;
+  gap: 0.8rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.sync-instructions-content.open {
+  display: flex;
+}
+
+.sync-instruction-step {
+  margin-bottom: 0.75rem;
+}
+
+.sync-instruction-step strong {
+  color: var(--text-main);
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.sql-code-box {
+  position: relative;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.sql-code-box pre {
+  margin: 0;
+  font-family: monospace;
+  font-size: 0.75rem;
+  overflow-x: auto;
+  color: #a5d6ff;
+}
+
+.copy-sql-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--card-border);
+  color: var(--text-main);
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.copy-sql-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.sync-btn-group-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.sync-btn-group-row button {
+  flex: 1;
+}

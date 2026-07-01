@@ -1,3 +1,5 @@
+import jsQR from 'jsqr';
+
 /* ============================================================
    CONSTANTS
    ============================================================ */
@@ -52,6 +54,7 @@ const syncBtn         = document.getElementById('syncBtn');
 const syncModal       = document.getElementById('syncModal');
 const syncModalBody   = document.getElementById('syncModalBody');
 const syncCloseBtn    = document.getElementById('syncCloseBtn');
+const qrFileInput     = document.getElementById('qrFileInput');
 
 /* ============================================================
    SETTINGS — LOAD / SAVE / DEFAULTS
@@ -729,6 +732,101 @@ async function decryptData(base64Ciphertext, passphrase) {
   return dec.decode(plaintextBuffer);
 }
 
+let localStream = null;
+let isScanning = false;
+let scanAnimFrame = null;
+
+function stopCameraScan() {
+  isScanning = false;
+  if (scanAnimFrame) cancelAnimationFrame(scanAnimFrame);
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+  const container = document.getElementById('scannerContainer');
+  if (container) container.classList.remove('active');
+  const video = document.getElementById('scannerVideo');
+  if (video) video.srcObject = null;
+}
+
+async function startCameraScan() {
+  const container = document.getElementById('scannerContainer');
+  const video = document.getElementById('scannerVideo');
+  if (!container || !video) return;
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = localStream;
+    video.setAttribute('playsinline', true); // Required for iOS
+    video.play();
+    container.classList.add('active');
+    isScanning = true;
+    scanAnimFrame = requestAnimationFrame(scanTick);
+  } catch (err) {
+    console.error('Camera access error:', err);
+    showToast('Could not access camera: ' + err.message, 'error');
+    isScanning = false;
+    const btn = document.getElementById('cameraScanBtn');
+    if (btn) btn.textContent = '📷 Scan QR Code';
+  }
+}
+
+function scanTick() {
+  if (!isScanning) return;
+  const video = document.getElementById('scannerVideo');
+  if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imgData.data, imgData.width, imgData.height);
+    if (code) {
+      showToast('QR Code detected!', 'success');
+      settings.syncKey = code.data;
+      saveSettings();
+      stopCameraScan();
+      syncData(true).then(() => renderSyncModal());
+      return;
+    }
+  }
+  scanAnimFrame = requestAnimationFrame(scanTick);
+}
+
+function triggerQRFileUpload() {
+  if (qrFileInput) qrFileInput.click();
+}
+
+function handleQRFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const imgData = ctx.getImageData(0, 0, img.width, img.height);
+      const code = jsQR(imgData.data, imgData.width, imgData.height);
+      if (code) {
+        showToast('QR Code detected from image!', 'success');
+        settings.syncKey = code.data;
+        saveSettings();
+        syncData(true).then(() => renderSyncModal());
+      } else {
+        showToast('Could not find a valid QR code in this image', 'error');
+      }
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
+  qrFileInput.value = '';
+}
+
 function getSupabaseConfig() {
   const url = settings.customSupabaseUrl || import.meta.env.VITE_SUPABASE_URL;
   const anonKey = settings.customSupabaseAnonKey || import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -842,6 +940,68 @@ function generateRandomKey() {
   return Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+function renderInstructionsPanel() {
+  return `
+    <div class="sync-instructions-panel">
+      <button id="instructionsToggle" class="sync-instructions-toggle">
+        ▶ Setup Instructions & SQL Script
+      </button>
+      <div id="instructionsContent" class="sync-instructions-content">
+        <p>Zero-Knowledge Sync encrypts your library and reading progress in your browser before uploading it. No passwords, emails, or personal details are ever stored.</p>
+        
+        <div class="sync-instruction-step">
+          <strong>1. Create a Supabase Account</strong>
+          Sign up for free at <a href="https://supabase.com" target="_blank" style="color: var(--accent-primary); text-decoration: underline;">supabase.com</a> and create a new project.
+        </div>
+        
+        <div class="sync-instruction-step">
+          <strong>2. Create the Database Table</strong>
+          Go to your Supabase project dashboard, click on <strong>SQL Editor</strong>, open a <strong>New query</strong>, paste the following SQL, and click <strong>Run</strong>:
+          <div class="sql-code-box">
+            <button id="copySqlBtn" class="copy-sql-btn">📋 Copy</button>
+            <pre><code id="sqlCode">CREATE TABLE public.sync_data (
+  id TEXT PRIMARY KEY,
+  payload TEXT NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.sync_data ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow anon select" ON public.sync_data FOR SELECT USING (true);
+CREATE POLICY "Allow anon insert" ON public.sync_data FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow anon update" ON public.sync_data FOR UPDATE USING (true);</code></pre>
+          </div>
+        </div>
+        
+        <div class="sync-instruction-step">
+          <strong>3. Enter Credentials</strong>
+          Copy your project's <strong>Project URL</strong> and <strong>Anon Key</strong> (found in Settings > API), and paste them into the <strong>Developer Credentials</strong> panel below.
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function attachInstructionsListeners() {
+  const toggle = document.getElementById('instructionsToggle');
+  const content = document.getElementById('instructionsContent');
+  const copyBtn = document.getElementById('copySqlBtn');
+  
+  if (toggle && content) {
+    toggle.addEventListener('click', () => {
+      content.classList.toggle('open');
+      toggle.textContent = content.classList.contains('open') ? '▼ Setup Instructions & SQL Script' : '▶ Setup Instructions & SQL Script';
+    });
+  }
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      const code = document.getElementById('sqlCode').textContent;
+      navigator.clipboard.writeText(code);
+      showToast('SQL Script copied to clipboard');
+    });
+  }
+}
+
 function renderSyncModal() {
   const config = getSupabaseConfig();
   const configWarning = (!config.url || !config.anonKey) 
@@ -878,6 +1038,7 @@ function renderSyncModal() {
       </div>
       
       ${renderDevPanel()}
+      ${renderInstructionsPanel()}
     `;
     
     document.getElementById('syncKeyText').addEventListener('click', (e) => {
@@ -890,6 +1051,7 @@ function renderSyncModal() {
     document.getElementById('forceSyncBtn').addEventListener('click', () => syncData(true));
     document.getElementById('unlinkSyncBtn').addEventListener('click', () => {
       if (confirm('Disconnect this device? Local data will be kept, but future progress will not sync.')) {
+        stopCameraScan();
         settings.syncKey = null;
         settings.syncLastTime = null;
         saveSettings();
@@ -903,6 +1065,18 @@ function renderSyncModal() {
       ${configWarning}
       <p class="sync-modal-desc">Seamlessly sync your library across devices without creating an account. Your data is encrypted locally and stored securely.</p>
       
+      <div class="sync-btn-group-row">
+        <button id="cameraScanBtn" class="sync-btn-secondary">📷 Scan QR Code</button>
+        <button id="uploadQRBtn" class="sync-btn-secondary">📁 Upload QR Image</button>
+      </div>
+
+      <div id="scannerContainer" class="scanner-video-container">
+        <video id="scannerVideo" class="scanner-video"></video>
+        <div class="scanner-overlay">
+          <div class="scanner-laser"></div>
+        </div>
+      </div>
+      
       <div class="sync-actions">
         <button id="generateSyncBtn" class="sync-btn-primary">✨ Generate New Sync Key</button>
         <div style="margin: 1rem 0; color: var(--text-muted);">— OR —</div>
@@ -913,8 +1087,20 @@ function renderSyncModal() {
       </div>
       
       ${renderDevPanel()}
+      ${renderInstructionsPanel()}
     `;
     
+    document.getElementById('cameraScanBtn').addEventListener('click', () => {
+      if (isScanning) {
+        stopCameraScan();
+        document.getElementById('cameraScanBtn').textContent = '📷 Scan QR Code';
+      } else {
+        startCameraScan();
+        document.getElementById('cameraScanBtn').textContent = '⏹ Stop Camera';
+      }
+    });
+    document.getElementById('uploadQRBtn').addEventListener('click', triggerQRFileUpload);
+
     document.getElementById('generateSyncBtn').addEventListener('click', () => {
       settings.syncKey = generateRandomKey();
       saveSettings();
@@ -932,6 +1118,7 @@ function renderSyncModal() {
   }
   
   attachDevPanelListeners();
+  attachInstructionsListeners();
 }
 
 function renderDevPanel() {
@@ -980,14 +1167,24 @@ syncBtn.addEventListener('click', () => {
   syncModal.classList.add('show');
 });
 syncCloseBtn.addEventListener('click', () => {
+  stopCameraScan();
   syncModal.classList.remove('show');
 });
 syncModal.addEventListener('click', (e) => {
-  if (e.target === syncModal) syncModal.classList.remove('show');
+  if (e.target === syncModal) {
+    stopCameraScan();
+    syncModal.classList.remove('show');
+  }
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && syncModal.classList.contains('show')) syncModal.classList.remove('show');
+  if (e.key === 'Escape' && syncModal.classList.contains('show')) {
+    stopCameraScan();
+    syncModal.classList.remove('show');
+  }
 });
+if (qrFileInput) {
+  qrFileInput.addEventListener('change', handleQRFileUpload);
+}
 
 // Auto-sync on startup
 if (settings.syncKey) {
