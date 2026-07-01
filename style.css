@@ -345,6 +345,40 @@ h1 {
   background: rgba(255, 127, 80, 0.1);
 }
 
+.cover-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--card-border);
+  color: var(--text-muted);
+  padding: 0.55rem 1.2rem;
+  border-radius: 50px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.cover-toggle-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-main);
+}
+
+.cover-toggle-btn.active {
+  background: var(--pill-active-bg);
+  border-color: var(--pill-active-border);
+  color: var(--pill-active-color);
+  font-weight: 600;
+  box-shadow: 0 0 8px rgba(138, 43, 226, 0.3);
+}
+
+.novel-card.hide-no-cover {
+  display: none !important;
+}
+
 .hidden {
   display: none !important;
 }

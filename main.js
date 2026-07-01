@@ -20,10 +20,14 @@ let activeLibFilter = 'all'; // 'all' | 'favorite' | 'Reading' | 'Plan to Read' 
  *   version: 1,
  *   library: { [novelId]: { favorite: boolean, status: string } },
  *   progress: { [novelId]: string[] },   // array of read volume titles
- *   theme: string
+ *   theme: string,
+ *   hideNoCover: boolean,
+ *   brokenCovers: string[]
  * }
  */
 let settings = loadSettings();
+let brokenCovers = new Set(settings.brokenCovers || []);
+let filterTimeout;
 
 /* ============================================================
    DOM REFS
@@ -43,12 +47,20 @@ const exportBtn       = document.getElementById('exportBtn');
 const importFile      = document.getElementById('importFile');
 const libPills        = document.querySelectorAll('.lib-pill');
 const themePills      = document.querySelectorAll('.theme-pill');
+const hideNoCoverBtn  = document.getElementById('hideNoCoverBtn');
 
 /* ============================================================
    SETTINGS — LOAD / SAVE / DEFAULTS
    ============================================================ */
 function defaultSettings() {
-  return { version: SETTINGS_VERSION, library: {}, progress: {}, theme: 'theme-midnight' };
+  return {
+    version: SETTINGS_VERSION,
+    library: {},
+    progress: {},
+    theme: 'theme-midnight',
+    hideNoCover: false,
+    brokenCovers: []
+  };
 }
 
 function loadSettings() {
@@ -62,6 +74,8 @@ function loadSettings() {
       library: parsed.library  || {},
       progress: parsed.progress || {},
       theme: parsed.theme       || 'theme-midnight',
+      hideNoCover: parsed.hideNoCover !== undefined ? parsed.hideNoCover : false,
+      brokenCovers: parsed.brokenCovers || []
     };
   } catch {
     return defaultSettings();
@@ -94,6 +108,10 @@ function applyTheme(themeName) {
    ============================================================ */
 async function init() {
   applyTheme(settings.theme);
+
+  if (hideNoCoverBtn) {
+    hideNoCoverBtn.classList.toggle('active', !!settings.hideNoCover);
+  }
 
   try {
     const response = await fetch(`${import.meta.env.BASE_URL}data.json`);
@@ -190,6 +208,10 @@ function applyFilters() {
   const excludedTags = Object.entries(tagStates).filter(([, s]) => s === 'exclude').map(([t]) => t.toLowerCase());
 
   let filtered = novelsData.filter(novel => {
+    // Hide no cover
+    const isBroken = !novel.cover || novel.cover === '' || brokenCovers.has(novel.id);
+    if (settings.hideNoCover && isBroken) return false;
+
     // Text search
     if (term) {
       const matches =
@@ -223,6 +245,13 @@ function applyFilters() {
   ];
 
   renderGrid(filtered);
+}
+
+function scheduleRefilter() {
+  clearTimeout(filterTimeout);
+  filterTimeout = setTimeout(() => {
+    applyFilters();
+  }, 50);
 }
 
 /* ============================================================
@@ -273,7 +302,7 @@ function renderGrid(novels) {
     card.innerHTML = `
       ${readingBadge}
       ${favIcon}
-      <img src="${novel.cover}" alt="Cover of ${novel.title}" loading="lazy" onerror="this.src='https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover'">
+      <img src="${novel.cover}" alt="Cover of ${novel.title}" class="novel-cover-img" loading="lazy">
       <div class="novel-title">${novel.title}</div>
       <div class="novel-meta">
         <span>Vols: ${novel.volumesCount || 0}</span>
@@ -281,6 +310,19 @@ function renderGrid(novels) {
         <span class="status-badge">${novel.status || 'Unknown'}</span>
       </div>
     `;
+
+    const img = card.querySelector('.novel-cover-img');
+    img.addEventListener('error', () => {
+      if (!brokenCovers.has(novel.id)) {
+        brokenCovers.add(novel.id);
+        settings.brokenCovers = Array.from(brokenCovers);
+        saveSettings();
+        if (settings.hideNoCover) {
+          scheduleRefilter();
+        }
+      }
+      img.src = 'https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover';
+    });
 
     card.addEventListener('click', () => openModal(novel));
     grid.appendChild(card);
@@ -512,15 +554,21 @@ function importBackup(file) {
       if (typeof parsed !== 'object' || !parsed.library || !parsed.progress) {
         throw new Error('Invalid backup file format.');
       }
-      // Merge — keep version, overwrite library/progress/theme
+      // Merge — keep version, overwrite library/progress/theme/hideNoCover/brokenCovers
       settings = {
         version: SETTINGS_VERSION,
         library: parsed.library  || {},
         progress: parsed.progress || {},
         theme: parsed.theme       || 'theme-midnight',
+        hideNoCover: parsed.hideNoCover !== undefined ? parsed.hideNoCover : false,
+        brokenCovers: parsed.brokenCovers || []
       };
+      brokenCovers = new Set(settings.brokenCovers);
       saveSettings();
       applyTheme(settings.theme);
+      if (hideNoCoverBtn) {
+        hideNoCoverBtn.classList.toggle('active', !!settings.hideNoCover);
+      }
       applyFilters();
       showToast('✅ Backup imported successfully!', 'success');
     } catch (err) {
@@ -588,6 +636,16 @@ exportBtn.addEventListener('click', exportBackup);
 importFile.addEventListener('change', (e) => {
   if (e.target.files[0]) importBackup(e.target.files[0]);
 });
+
+// Hide No Cover toggle
+if (hideNoCoverBtn) {
+  hideNoCoverBtn.addEventListener('click', () => {
+    settings.hideNoCover = !settings.hideNoCover;
+    saveSettings();
+    hideNoCoverBtn.classList.toggle('active', settings.hideNoCover);
+    applyFilters();
+  });
+}
 
 /* ============================================================
    START
