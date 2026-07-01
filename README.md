@@ -20,6 +20,7 @@ A sleek, dark-themed static web app for browsing and downloading a personal ligh
 | **🔖 Volume Progress Tracking** | Check off individual volumes as read; progress shown as `X/Y read` in the modal and on each card |
 | **🎨 Themes** | Three built-in themes — *Midnight Abyss* (default), *Sakura Cozy*, *Cyberpunk Neon* — switchable from the header |
 | **💾 Backup Export / Import** | One-click export of all library data (favorites, statuses, progress, theme) as a `.json` file; re-import on any device. Keyed by novel ID so backups stay valid even when `data.json` changes |
+| **🔄 Zero-Knowledge Sync** | Secure, client-side encrypted sync using Supabase. Generate a Sync Key, scan a QR code (using camera or image upload), and keep your PC and mobile devices in sync with zero data leak risk |
 | **📌 Reading-first sort** | Novels with **"Reading"** status always appear at the top of the grid |
 
 ---
@@ -128,6 +129,49 @@ Serves the `dist/` folder at `http://localhost:4173` to verify the production bu
 3. Commit and push to `main` — the GitHub Actions workflow will rebuild and redeploy automatically.
 
 > **`data.json` lives in `public/`** so Vite copies it verbatim into `dist/` without bundling it. This keeps it easy to diff and edit in-place.
+
+---
+
+## 🔄 Setup Cloud Synchronization (Supabase)
+
+To sync your library across devices securely without creating a password-based account, the app uses a **Zero-Knowledge Sync Key** system powered by a free [Supabase](https://supabase.com) database.
+
+### 🔒 Zero-Knowledge Security
+* All settings and progress are encrypted in your browser using the **AES-GCM Web Crypto API** before upload.
+* The decryption key (your **Sync Key**) remains on your device and is **never** sent to the cloud database.
+* The database host only stores encrypted text, meaning it is mathematically impossible for anyone to read your data in the event of a database leak.
+
+### 🛠️ Setup Instructions
+
+1. **Create a Free Supabase Project**:
+   Sign up at [Supabase](https://supabase.com) and create a new project.
+2. **Create the Database Table**:
+   Open the **SQL Editor** in your Supabase dashboard, paste the following SQL commands, and click **Run**:
+   ```sql
+   create table public.sync_data (
+     id text primary key, -- SHA-256 hash of the Sync Key
+     payload text not null, -- Encrypted JSON payload
+     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+   );
+
+   -- Enable Row Level Security
+   alter table public.sync_data enable row level security;
+
+   -- Allow anonymous access to payloads (since data is fully client-side encrypted anyway)
+   create policy "Allow anon select" on public.sync_data for select using (true);
+   create policy "Allow anon insert" on public.sync_data for insert with check (true);
+   create policy "Allow anon update" on public.sync_data for update using (true);
+   ```
+3. **Configure Environment Variables**:
+   In your repository root, create a `.env` file (or set GitHub Repository Secrets for automatic deployments) containing:
+   ```env
+   VITE_SUPABASE_URL=your_supabase_project_url
+   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
+   *Note: If no environment variables are present at build time, users can still input their credentials in the **Developer Credentials** panel inside the app's Sync menu.*
+4. **Link Devices**:
+   - Open **Sync** on one device and click **Generate New Sync Key** (which will display a Sync Key and QR Code).
+   - Open the app on another device, click **Sync**, and scan the QR code (using camera stream or by uploading a screenshot of it), or paste the plain text key.
 
 ---
 
