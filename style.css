@@ -1115,3 +1115,173 @@ h1 {
     gap: 0.6rem;
   }
 }
+
+/* ============================================================
+   SYNC MODAL STYLES
+   ============================================================ */
+.sync-modal-content {
+  max-width: 500px;
+  text-align: center;
+  padding: 2.5rem;
+}
+
+.sync-modal-title {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sync-modal-desc {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin-bottom: 2rem;
+  line-height: 1.5;
+}
+
+.sync-key-display {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1rem;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 1.2rem;
+  letter-spacing: 2px;
+  margin-bottom: 1rem;
+  border: 1px solid var(--card-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  word-break: break-all;
+}
+
+.sync-qr-container {
+  margin: 1.5rem auto;
+  background: white;
+  padding: 10px;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+.sync-qr-container img {
+  display: block;
+}
+
+.sync-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.sync-btn-primary {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: white;
+  border: none;
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.sync-btn-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
+
+.sync-btn-secondary {
+  background: transparent;
+  color: var(--text-main);
+  border: 1px solid var(--card-border);
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.sync-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sync-btn-danger {
+  background: rgba(255, 60, 60, 0.1);
+  color: #ff5555;
+  border: 1px solid rgba(255, 60, 60, 0.3);
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.sync-btn-danger:hover {
+  background: rgba(255, 60, 60, 0.2);
+}
+
+.sync-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.sync-input-group.row {
+  flex-direction: row;
+}
+
+.sync-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--card-border);
+  color: var(--text-main);
+  padding: 0.8rem;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.sync-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.sync-dev-panel {
+  margin-top: 2rem;
+  text-align: left;
+  border-top: 1px solid var(--card-border);
+  padding-top: 1rem;
+}
+
+.sync-dev-toggle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.sync-dev-toggle:hover {
+  color: var(--text-main);
+}
+
+.sync-dev-content {
+  display: none;
+  margin-top: 1rem;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sync-dev-content.open {
+  display: flex;
+}
+
+.sync-dev-content label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}

@@ -48,6 +48,10 @@ const importFile      = document.getElementById('importFile');
 const libPills        = document.querySelectorAll('.lib-pill');
 const themePills      = document.querySelectorAll('.theme-pill');
 const hideNoCoverBtn  = document.getElementById('hideNoCoverBtn');
+const syncBtn         = document.getElementById('syncBtn');
+const syncModal       = document.getElementById('syncModal');
+const syncModalBody   = document.getElementById('syncModalBody');
+const syncCloseBtn    = document.getElementById('syncCloseBtn');
 
 /* ============================================================
    SETTINGS — LOAD / SAVE / DEFAULTS
@@ -59,7 +63,11 @@ function defaultSettings() {
     progress: {},
     theme: 'theme-midnight',
     hideNoCover: false,
-    brokenCovers: []
+    brokenCovers: [],
+    syncKey: null,
+    syncLastTime: null,
+    customSupabaseUrl: '',
+    customSupabaseAnonKey: ''
   };
 }
 
@@ -75,15 +83,29 @@ function loadSettings() {
       progress: parsed.progress || {},
       theme: parsed.theme       || 'theme-midnight',
       hideNoCover: parsed.hideNoCover !== undefined ? parsed.hideNoCover : false,
-      brokenCovers: parsed.brokenCovers || []
+      brokenCovers: parsed.brokenCovers || [],
+      syncKey: parsed.syncKey || null,
+      syncLastTime: parsed.syncLastTime || null,
+      customSupabaseUrl: parsed.customSupabaseUrl || '',
+      customSupabaseAnonKey: parsed.customSupabaseAnonKey || ''
     };
   } catch {
     return defaultSettings();
   }
 }
 
+let syncTimeout = null;
+function scheduleSync() {
+  if (!settings.syncKey) return;
+  if (syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(() => {
+    if (typeof syncData === 'function') syncData();
+  }, 2000);
+}
+
 function saveSettings() {
   localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings));
+  scheduleSync();
 }
 
 /* ============================================================
@@ -645,6 +667,331 @@ if (hideNoCoverBtn) {
     hideNoCoverBtn.classList.toggle('active', settings.hideNoCover);
     applyFilters();
   });
+}
+
+/* ============================================================
+   ZERO-KNOWLEDGE SYNC ENGINE
+   ============================================================ */
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
+
+function base64ToArrayBuffer(base64) {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function getCryptoKey(passphrase) {
+  const enc = new TextEncoder();
+  const rawKey = enc.encode(passphrase + '_encrypt');
+  const hash = await window.crypto.subtle.digest('SHA-256', rawKey);
+  return await window.crypto.subtle.importKey('raw', hash, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function getLookupId(passphrase) {
+  const enc = new TextEncoder();
+  const rawData = enc.encode(passphrase + '_lookup');
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', rawData);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function encryptData(plaintext, passphrase) {
+  const enc = new TextEncoder();
+  const key = await getCryptoKey(passphrase);
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const ciphertextBuffer = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, enc.encode(plaintext));
+  const ciphertext = new Uint8Array(ciphertextBuffer);
+  const combined = new Uint8Array(iv.length + ciphertext.length);
+  combined.set(iv);
+  combined.set(ciphertext, iv.length);
+  return arrayBufferToBase64(combined);
+}
+
+async function decryptData(base64Ciphertext, passphrase) {
+  const dec = new TextDecoder();
+  const key = await getCryptoKey(passphrase);
+  const combined = base64ToArrayBuffer(base64Ciphertext);
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+  const plaintextBuffer = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, ciphertext);
+  return dec.decode(plaintextBuffer);
+}
+
+function getSupabaseConfig() {
+  const url = settings.customSupabaseUrl || import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = settings.customSupabaseAnonKey || import.meta.env.VITE_SUPABASE_ANON_KEY;
+  return { url, anonKey };
+}
+
+async function pullCloudData(lookupId) {
+  const config = getSupabaseConfig();
+  if (!config.url || !config.anonKey) throw new Error('Supabase configuration missing');
+  const res = await fetch(`${config.url}/rest/v1/sync_data?id=eq.${lookupId}`, {
+    headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` }
+  });
+  if (!res.ok) throw new Error('Failed to fetch from cloud');
+  const data = await res.json();
+  return data.length ? data[0] : null;
+}
+
+async function pushCloudData(lookupId, encryptedPayload) {
+  const config = getSupabaseConfig();
+  if (!config.url || !config.anonKey) throw new Error('Supabase configuration missing');
+  const res = await fetch(`${config.url}/rest/v1/sync_data`, {
+    method: 'POST',
+    headers: {
+      apikey: config.anonKey,
+      Authorization: `Bearer ${config.anonKey}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify({ id: lookupId, payload: encryptedPayload, updated_at: new Date().toISOString() })
+  });
+  if (!res.ok) throw new Error('Failed to push to cloud');
+}
+
+async function syncData(manual = false) {
+  if (!settings.syncKey) return;
+  const btnIcon = syncBtn;
+  const originalText = btnIcon.textContent;
+  btnIcon.textContent = '🔄 Syncing...';
+  
+  try {
+    const lookupId = await getLookupId(settings.syncKey);
+    const cloudRecord = await pullCloudData(lookupId);
+    
+    let needsPush = true;
+    if (cloudRecord && cloudRecord.payload) {
+      try {
+        const decryptedJson = await decryptData(cloudRecord.payload, settings.syncKey);
+        const cloudSettings = JSON.parse(decryptedJson);
+        
+        // Two-way merge
+        let mergedLibrary = { ...settings.library };
+        for (const [id, cEntry] of Object.entries(cloudSettings.library || {})) {
+          if (!mergedLibrary[id]) {
+            mergedLibrary[id] = cEntry;
+          } else {
+            mergedLibrary[id].favorite = mergedLibrary[id].favorite || cEntry.favorite;
+            if (cEntry.status && !mergedLibrary[id].status) mergedLibrary[id].status = cEntry.status;
+          }
+        }
+        
+        let mergedProgress = { ...settings.progress };
+        for (const [id, cArr] of Object.entries(cloudSettings.progress || {})) {
+          if (!mergedProgress[id]) {
+            mergedProgress[id] = cArr;
+          } else {
+            mergedProgress[id] = [...new Set([...mergedProgress[id], ...cArr])];
+          }
+        }
+        
+        settings.library = mergedLibrary;
+        settings.progress = mergedProgress;
+        
+        // Disable scheduling temporarily so we don't recursive loop
+        const tmpTimeout = syncTimeout;
+        syncTimeout = 'LOCKED';
+        localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings));
+        syncTimeout = tmpTimeout;
+        
+        applyFilters(); // Re-render grid
+      } catch (err) {
+        console.error('Decryption failed, maybe wrong key?', err);
+        if (manual) showToast('Sync failed: Invalid key or corrupted data', 'error');
+        btnIcon.textContent = originalText;
+        return;
+      }
+    }
+    
+    // Push our current (merged) settings
+    const currentJson = JSON.stringify({
+      library: settings.library,
+      progress: settings.progress
+    });
+    const encrypted = await encryptData(currentJson, settings.syncKey);
+    await pushCloudData(lookupId, encrypted);
+    
+    settings.syncLastTime = Date.now();
+    localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings));
+    
+    if (manual) showToast('✅ Synced successfully', 'success');
+  } catch (err) {
+    console.error('Sync error:', err);
+    if (manual) showToast('Sync failed: ' + err.message, 'error');
+  }
+  btnIcon.textContent = originalText;
+  if (syncModal.classList.contains('show')) renderSyncModal();
+}
+
+function generateRandomKey() {
+  const array = new Uint8Array(8);
+  window.crypto.getRandomValues(array);
+  return Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function renderSyncModal() {
+  const config = getSupabaseConfig();
+  const configWarning = (!config.url || !config.anonKey) 
+    ? `<div style="color: #ff5555; background: rgba(255,0,0,0.1); padding: 10px; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem;">
+        ⚠️ Supabase not configured! Please open Developer Credentials below and set them up.
+       </div>` : '';
+
+  if (settings.syncKey) {
+    const lastSyncStr = settings.syncLastTime ? new Date(settings.syncLastTime).toLocaleString() : 'Never';
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=255-255-255&bgcolor=11-12-16&data=${encodeURIComponent(settings.syncKey)}`;
+    
+    syncModalBody.innerHTML = `
+      <h2 class="sync-modal-title">Sync Active</h2>
+      ${configWarning}
+      <p class="sync-modal-desc">Your progress is being synced securely across devices.</p>
+      
+      <div class="sync-key-display">
+        <span id="syncKeyText" style="filter: blur(4px); transition: filter 0.3s; cursor: pointer;" title="Click to reveal">
+          ${settings.syncKey}
+        </span>
+        <button id="copySyncKeyBtn" class="sync-btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">📋 Copy</button>
+      </div>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">Plain text key - keep this secret!</p>
+      
+      <div class="sync-qr-container">
+        <img src="${qrUrl}" alt="QR Code" width="150" height="150" title="Scan to link another device" />
+      </div>
+      
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Last Synced: ${lastSyncStr}</p>
+      
+      <div class="sync-actions">
+        <button id="forceSyncBtn" class="sync-btn-primary">🔄 Sync Now</button>
+        <button id="unlinkSyncBtn" class="sync-btn-danger">Disconnect Device</button>
+      </div>
+      
+      ${renderDevPanel()}
+    `;
+    
+    document.getElementById('syncKeyText').addEventListener('click', (e) => {
+      e.target.style.filter = e.target.style.filter === 'none' ? 'blur(4px)' : 'none';
+    });
+    document.getElementById('copySyncKeyBtn').addEventListener('click', () => {
+      navigator.clipboard.writeText(settings.syncKey);
+      showToast('Key copied to clipboard');
+    });
+    document.getElementById('forceSyncBtn').addEventListener('click', () => syncData(true));
+    document.getElementById('unlinkSyncBtn').addEventListener('click', () => {
+      if (confirm('Disconnect this device? Local data will be kept, but future progress will not sync.')) {
+        settings.syncKey = null;
+        settings.syncLastTime = null;
+        saveSettings();
+        renderSyncModal();
+        showToast('Device disconnected');
+      }
+    });
+  } else {
+    syncModalBody.innerHTML = `
+      <h2 class="sync-modal-title">Zero-Knowledge Sync</h2>
+      ${configWarning}
+      <p class="sync-modal-desc">Seamlessly sync your library across devices without creating an account. Your data is encrypted locally and stored securely.</p>
+      
+      <div class="sync-actions">
+        <button id="generateSyncBtn" class="sync-btn-primary">✨ Generate New Sync Key</button>
+        <div style="margin: 1rem 0; color: var(--text-muted);">— OR —</div>
+        <div class="sync-input-group row">
+          <input type="text" id="existingSyncKey" class="sync-input" placeholder="Paste existing Sync Key..." />
+          <button id="connectSyncBtn" class="sync-btn-secondary">Connect</button>
+        </div>
+      </div>
+      
+      ${renderDevPanel()}
+    `;
+    
+    document.getElementById('generateSyncBtn').addEventListener('click', () => {
+      settings.syncKey = generateRandomKey();
+      saveSettings();
+      syncData(true);
+      renderSyncModal();
+    });
+    document.getElementById('connectSyncBtn').addEventListener('click', () => {
+      const val = document.getElementById('existingSyncKey').value.trim();
+      if (val) {
+        settings.syncKey = val;
+        saveSettings();
+        syncData(true).then(() => renderSyncModal());
+      }
+    });
+  }
+  
+  attachDevPanelListeners();
+}
+
+function renderDevPanel() {
+  return `
+    <div class="sync-dev-panel">
+      <button id="devPanelToggle" class="sync-dev-toggle">
+        ▶ Developer Credentials (Optional)
+      </button>
+      <div id="devPanelContent" class="sync-dev-content">
+        <label>Custom Supabase URL
+          <input type="text" id="customSupabaseUrl" class="sync-input" value="${escapeAttr(settings.customSupabaseUrl)}" placeholder="https://..." />
+        </label>
+        <label>Custom Supabase Anon Key
+          <input type="password" id="customSupabaseAnonKey" class="sync-input" value="${escapeAttr(settings.customSupabaseAnonKey)}" placeholder="eyJhbG..." />
+        </label>
+        <button id="saveDevConfigBtn" class="sync-btn-secondary">Save Config</button>
+      </div>
+    </div>
+  `;
+}
+
+function attachDevPanelListeners() {
+  const toggle = document.getElementById('devPanelToggle');
+  const content = document.getElementById('devPanelContent');
+  const saveBtn = document.getElementById('saveDevConfigBtn');
+  
+  if(toggle && content) {
+    toggle.addEventListener('click', () => {
+      content.classList.toggle('open');
+      toggle.textContent = content.classList.contains('open') ? '▼ Developer Credentials (Optional)' : '▶ Developer Credentials (Optional)';
+    });
+  }
+  if(saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      settings.customSupabaseUrl = document.getElementById('customSupabaseUrl').value.trim();
+      settings.customSupabaseAnonKey = document.getElementById('customSupabaseAnonKey').value.trim();
+      saveSettings();
+      showToast('Config saved');
+      renderSyncModal();
+    });
+  }
+}
+
+syncBtn.addEventListener('click', () => {
+  renderSyncModal();
+  syncModal.classList.add('show');
+});
+syncCloseBtn.addEventListener('click', () => {
+  syncModal.classList.remove('show');
+});
+syncModal.addEventListener('click', (e) => {
+  if (e.target === syncModal) syncModal.classList.remove('show');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && syncModal.classList.contains('show')) syncModal.classList.remove('show');
+});
+
+// Auto-sync on startup
+if (settings.syncKey) {
+  setTimeout(() => syncData(false), 1000);
 }
 
 /* ============================================================

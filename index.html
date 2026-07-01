@@ -20,8 +20,9 @@
           <button class="theme-pill" id="theme-sakura" data-theme="theme-sakura">🌸 Sakura</button>
           <button class="theme-pill" id="theme-cyberpunk" data-theme="theme-cyberpunk">📟 Neon</button>
         </div>
-        <!-- Import/Export -->
+        <!-- Import/Export & Sync -->
         <div class="backup-controls">
+          <button id="syncBtn" class="backup-btn" title="Sync data between devices">🔄 Sync</button>
           <button id="exportBtn" class="backup-btn" title="Export your library backup">⬆ Export</button>
           <label id="importLabel" class="backup-btn" title="Import a library backup">⬇ Import
             <input type="file" id="importFile" accept=".json" hidden>
@@ -70,6 +71,13 @@
     <div class="modal-content glass">
       <span class="close-btn">&times;</span>
       <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <div id="syncModal" class="modal">
+    <div class="modal-content glass sync-modal-content">
+      <span class="close-btn" id="syncCloseBtn">&times;</span>
+      <div id="syncModalBody"></div>
     </div>
   </div>
 
