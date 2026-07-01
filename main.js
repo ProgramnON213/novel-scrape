@@ -784,7 +784,18 @@ function scanTick() {
     const code = jsQR(imgData.data, imgData.width, imgData.height);
     if (code) {
       showToast('QR Code detected!', 'success');
-      settings.syncKey = code.data;
+      try {
+        const parsed = JSON.parse(code.data);
+        if (parsed && parsed.key) {
+          settings.syncKey = parsed.key;
+          if (parsed.url) settings.customSupabaseUrl = parsed.url;
+          if (parsed.anon) settings.customSupabaseAnonKey = parsed.anon;
+        } else {
+          settings.syncKey = code.data;
+        }
+      } catch (e) {
+        settings.syncKey = code.data;
+      }
       saveSettings();
       stopCameraScan();
       syncData(true).then(() => renderSyncModal());
@@ -814,7 +825,18 @@ function handleQRFileUpload(e) {
       const code = jsQR(imgData.data, imgData.width, imgData.height);
       if (code) {
         showToast('QR Code detected from image!', 'success');
-        settings.syncKey = code.data;
+        try {
+          const parsed = JSON.parse(code.data);
+          if (parsed && parsed.key) {
+            settings.syncKey = parsed.key;
+            if (parsed.url) settings.customSupabaseUrl = parsed.url;
+            if (parsed.anon) settings.customSupabaseAnonKey = parsed.anon;
+          } else {
+            settings.syncKey = code.data;
+          }
+        } catch (e) {
+          settings.syncKey = code.data;
+        }
         saveSettings();
         syncData(true).then(() => renderSyncModal());
       } else {
@@ -1011,7 +1033,12 @@ function renderSyncModal() {
 
   if (settings.syncKey) {
     const lastSyncStr = settings.syncLastTime ? new Date(settings.syncLastTime).toLocaleString() : 'Never';
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=255-255-255&bgcolor=11-12-16&data=${encodeURIComponent(settings.syncKey)}`;
+    const qrPayload = JSON.stringify({
+      key: settings.syncKey,
+      url: config.url || '',
+      anon: config.anonKey || ''
+    });
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=255-255-255&bgcolor=11-12-16&data=${encodeURIComponent(qrPayload)}`;
     
     syncModalBody.innerHTML = `
       <h2 class="sync-modal-title">Sync Active</h2>
