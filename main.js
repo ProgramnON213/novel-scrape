@@ -237,7 +237,15 @@ function getLibEntry(novelId) {
 }
 
 function setLibEntry(novelId, patch) {
-  settings.library[novelId] = { ...getLibEntry(novelId), ...patch };
+  const current = getLibEntry(novelId);
+  const updatedPatch = { ...patch };
+  if ('favorite' in patch && patch.favorite !== current.favorite) {
+    updatedPatch.favoriteUpdatedAt = Date.now();
+  }
+  if ('status' in patch && patch.status !== current.status) {
+    updatedPatch.statusUpdatedAt = Date.now();
+  }
+  settings.library[novelId] = { ...current, ...updatedPatch };
   saveSettings();
 }
 
@@ -935,8 +943,29 @@ async function syncData(manual = false) {
           if (!mergedLibrary[id]) {
             mergedLibrary[id] = cEntry;
           } else {
-            mergedLibrary[id].favorite = mergedLibrary[id].favorite || cEntry.favorite;
-            if (cEntry.status && !mergedLibrary[id].status) mergedLibrary[id].status = cEntry.status;
+            const localEntry = mergedLibrary[id];
+            
+            // Merge favorite based on timestamp (fallback to OR for legacy)
+            const localFavTime = localEntry.favoriteUpdatedAt || 0;
+            const cloudFavTime = cEntry.favoriteUpdatedAt || 0;
+            if (cloudFavTime > localFavTime) {
+              localEntry.favorite = cEntry.favorite;
+              localEntry.favoriteUpdatedAt = cloudFavTime;
+            } else if (cloudFavTime === localFavTime) {
+              localEntry.favorite = localEntry.favorite || cEntry.favorite;
+            }
+            
+            // Merge status based on timestamp (fallback to keep non-empty for legacy)
+            const localStatusTime = localEntry.statusUpdatedAt || 0;
+            const cloudStatusTime = cEntry.statusUpdatedAt || 0;
+            if (cloudStatusTime > localStatusTime) {
+              localEntry.status = cEntry.status;
+              localEntry.statusUpdatedAt = cloudStatusTime;
+            } else if (cloudStatusTime === localStatusTime) {
+              if (cEntry.status && !localEntry.status) {
+                localEntry.status = cEntry.status;
+              }
+            }
           }
         }
         
