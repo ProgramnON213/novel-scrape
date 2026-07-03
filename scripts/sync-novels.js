@@ -146,12 +146,12 @@ const GENRE_MAPPINGS = {
 };
 
 /**
- * Standardizes genre names to match the database conventions (e.g. Scifi -> Sci-fi, casing, etc.).
+ * Standardizes genre names to match the database conventions (e.g. Scifi -> Sci-fi, casing, etc.) and sorts them.
  */
 function normalizeGenres(genreStr) {
   if (!genreStr || typeof genreStr !== 'string') return '';
   
-  return genreStr
+  const normalizedList = genreStr
     .split(',')
     .map(g => {
       const trimmed = g.trim();
@@ -168,8 +168,32 @@ function normalizeGenres(genreStr) {
           return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
         });
     })
-    .filter(Boolean)
-    .join(', ');
+    .filter(Boolean);
+    
+  // Sort alphabetically to maintain consistency across the entire DB
+  return Array.from(new Set(normalizedList)).sort().join(', ');
+}
+
+/**
+ * Merges two comma-separated genre strings, keeping unique values, and sorts them alphabetically.
+ */
+function mergeAndSortGenres(existingGenreStr, newGenreStr) {
+  const existingSet = new Set(
+    (existingGenreStr || '')
+      .split(',')
+      .map(g => g.trim())
+      .filter(Boolean)
+  );
+  
+  const newSet = new Set(
+    (newGenreStr || '')
+      .split(',')
+      .map(g => g.trim())
+      .filter(Boolean)
+  );
+
+  const combinedSet = new Set([...existingSet, ...newSet]);
+  return Array.from(combinedSet).sort().join(', ');
 }
 
 /**
@@ -349,23 +373,46 @@ function run() {
       // Check general field changes (status, cover, etc.) if they are defined in newNovel
       const fieldsToCheck = ['status', 'cover', 'genre', 'synopsis', 'alternative', 'authors', 'artist', 'translationGroup'];
       fieldsToCheck.forEach(field => {
-        if (newNovel[field] !== undefined && newNovel[field] !== existingNovel[field]) {
-          // Special rule for cover image: if existing has a cover, don't overwrite it
-          if (field === 'cover') {
-            const currentCoverAvailable = existingNovel.cover && existingNovel.cover.trim() !== '';
-            if (currentCoverAvailable) {
-              return; // skip updating cover
+        if (newNovel[field] !== undefined) {
+          // Special rule for genres: merge existing and new, sort alphabetically, compare
+          if (field === 'genre') {
+            const existingSorted = (existingNovel.genre || '')
+              .split(',')
+              .map(g => g.trim())
+              .filter(Boolean)
+              .sort()
+              .join(', ');
+
+            const mergedSorted = mergeAndSortGenres(existingNovel.genre, newNovel.genre);
+
+            if (mergedSorted !== existingSorted) {
+              fieldChanges.push({
+                field,
+                oldVal: existingNovel.genre || '',
+                newVal: mergedSorted
+              });
             }
-          }
-          // ignore empty fields in new data replacing non-empty fields in existing
-          if (newNovel[field] === '' && existingNovel[field] !== '') {
             return;
           }
-          fieldChanges.push({
-            field,
-            oldVal: existingNovel[field],
-            newVal: newNovel[field]
-          });
+
+          if (newNovel[field] !== existingNovel[field]) {
+            // Special rule for cover image: if existing has a cover, don't overwrite it
+            if (field === 'cover') {
+              const currentCoverAvailable = existingNovel.cover && existingNovel.cover.trim() !== '';
+              if (currentCoverAvailable) {
+                return; // skip updating cover
+              }
+            }
+            // ignore empty fields in new data replacing non-empty fields in existing
+            if (newNovel[field] === '' && existingNovel[field] !== '') {
+              return;
+            }
+            fieldChanges.push({
+              field,
+              oldVal: existingNovel[field],
+              newVal: newNovel[field]
+            });
+          }
         }
       });
 
