@@ -116,6 +116,40 @@ function getNextId(db) {
   return formatId(maxId + 1);
 }
 
+/**
+ * Normalizes novel data from external sources (like animeStuff) to conform to the standard schema.
+ */
+function normalizeNovelData(data) {
+  if (!Array.isArray(data)) return data;
+  
+  return data.map(item => {
+    if (typeof item !== 'object' || item === null) return item;
+    
+    const normalized = { ...item };
+    
+    // Convert 'genres' array to comma-separated 'genre' string
+    if (Array.isArray(normalized.genres)) {
+      normalized.genre = normalized.genres.join(', ');
+      delete normalized.genres;
+    }
+    
+    // Strip external url fields
+    if (normalized.url !== undefined) {
+      delete normalized.url;
+    }
+
+    // Default missing fields for new novels
+    if (normalized.type === undefined) normalized.type = 'Light Novel';
+    if (normalized.status === undefined) normalized.status = 'Ongoing';
+    if (normalized.volumes === undefined) normalized.volumes = [];
+    if (normalized.volumesCount === undefined) {
+      normalized.volumesCount = String(normalized.volumes.length);
+    }
+    
+    return normalized;
+  });
+}
+
 function run() {
   const isMerge = process.argv.includes('--merge');
 
@@ -143,10 +177,13 @@ function run() {
     process.exit(1);
   }
 
-  const newDb = loadJSON(NEW_DB_PATH);
+  let newDb = loadJSON(NEW_DB_PATH);
   if (!newDb) {
     process.exit(1);
   }
+
+  // Normalize incoming novel data structure (e.g. animeStuff format compatibility)
+  newDb = normalizeNovelData(newDb);
 
   // Validate database schema
   if (!validateJSONSchema(newDb, NEW_DB_PATH)) {
