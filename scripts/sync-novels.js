@@ -116,6 +116,62 @@ function getNextId(db) {
   return formatId(maxId + 1);
 }
 
+const GENRE_MAPPINGS = {
+  'scifi': 'Sci-fi',
+  'sci-fi': 'Sci-fi',
+  'science fiction': 'Sci-fi',
+  'sliceoflife': 'Slice of Life',
+  'slice of life': 'Slice of Life',
+  'schoollife': 'School Life',
+  'school life': 'School Life',
+  'martialarts': 'Martial Arts',
+  'martial arts': 'Martial Arts',
+  'wuxia': 'Wuxia',
+  'xianxia': 'Xianxia',
+  'xuanhuan': 'Xuanhuan',
+  'comedy': 'Comedy',
+  'romance': 'Romance',
+  'action': 'Action',
+  'fantasy': 'Fantasy',
+  'harem': 'Harem',
+  'adventure': 'Adventure',
+  'drama': 'Drama',
+  'ecchi': 'Ecchi',
+  'mecha': 'Mecha',
+  'shounen': 'Shounen',
+  'historical': 'Historical',
+  'mystery': 'Mystery',
+  'supernatural': 'Supernatural',
+  'tragedy': 'Tragedy'
+};
+
+/**
+ * Standardizes genre names to match the database conventions (e.g. Scifi -> Sci-fi, casing, etc.).
+ */
+function normalizeGenres(genreStr) {
+  if (!genreStr || typeof genreStr !== 'string') return '';
+  
+  return genreStr
+    .split(',')
+    .map(g => {
+      const trimmed = g.trim();
+      const lower = trimmed.toLowerCase();
+      
+      // Check in mappings
+      if (GENRE_MAPPINGS[lower]) {
+        return GENRE_MAPPINGS[lower];
+      }
+      
+      // Fallback: title case the genre words (e.g. "slice of life" -> "Slice of Life")
+      return trimmed
+        .replace(/([^\s:\-]+)/g, (match) => {
+          return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
+        });
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
 /**
  * Normalizes novel data from external sources (like animeStuff) to conform to the standard schema.
  */
@@ -131,6 +187,11 @@ function normalizeNovelData(data) {
     if (Array.isArray(normalized.genres)) {
       normalized.genre = normalized.genres.join(', ');
       delete normalized.genres;
+    }
+    
+    // Normalize and standardize genre/tag naming
+    if (normalized.genre) {
+      normalized.genre = normalizeGenres(normalized.genre);
     }
     
     // Strip external url fields
@@ -289,6 +350,13 @@ function run() {
       const fieldsToCheck = ['status', 'cover', 'genre', 'synopsis', 'alternative', 'authors', 'artist', 'translationGroup'];
       fieldsToCheck.forEach(field => {
         if (newNovel[field] !== undefined && newNovel[field] !== existingNovel[field]) {
+          // Special rule for cover image: if existing has a cover, don't overwrite it
+          if (field === 'cover') {
+            const currentCoverAvailable = existingNovel.cover && existingNovel.cover.trim() !== '';
+            if (currentCoverAvailable) {
+              return; // skip updating cover
+            }
+          }
           // ignore empty fields in new data replacing non-empty fields in existing
           if (newNovel[field] === '' && existingNovel[field] !== '') {
             return;
