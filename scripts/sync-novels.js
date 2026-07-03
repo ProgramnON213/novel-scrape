@@ -3,14 +3,77 @@ import path from 'path';
 
 // File paths
 const MAIN_DB_PATH = path.resolve('public/data.json');
-const NEW_DB_PATH = path.resolve('new-data.json');
 const BACKUP_DIR = path.resolve('backup');
+
+// Help message check
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log('Usage: node scripts/sync-novels.js [path-to-json] [--merge]');
+  console.log('Options:');
+  console.log('  --merge      Merge the detected updates into public/data.json (creates a backup first)');
+  console.log('  --help, -h   Show this help message');
+  process.exit(0);
+}
+
+// Parse custom path from CLI arguments
+const args = process.argv.slice(2).filter(arg => arg !== '--merge');
+const customPath = args.length > 0 ? args[0] : null;
+const NEW_DB_PATH = customPath ? path.resolve(customPath) : path.resolve('new-data.json');
 
 /**
  * Normalizes a string for robust matching.
  */
 function normalizeString(str) {
   return str ? str.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+}
+
+/**
+ * Validates the loaded JSON structure.
+ * Returns true if valid, false otherwise.
+ */
+function validateJSONSchema(data, filePath) {
+  if (!Array.isArray(data)) {
+    console.error(`\x1b[31mError in "${filePath}": Root element must be a JSON array.\x1b[0m`);
+    return false;
+  }
+
+  let isValid = true;
+  for (let i = 0; i < data.length; i++) {
+    const item = data[i];
+    const indexStr = `at index ${i}`;
+
+    if (typeof item !== 'object' || item === null) {
+      console.error(`\x1b[31mError ${indexStr}: Element is not a valid object.\x1b[0m`);
+      isValid = false;
+      continue;
+    }
+
+    // Critical fields
+    if (!item.title || typeof item.title !== 'string' || item.title.trim() === '') {
+      console.error(`\x1b[31mError ${indexStr}: Novel is missing a valid "title" string.\x1b[0m`);
+      isValid = false;
+    }
+
+    // Check volumes if present
+    if (item.volumes !== undefined) {
+      if (!Array.isArray(item.volumes)) {
+        console.error(`\x1b[31mError ${indexStr} ("${item.title || 'Unknown'}"): "volumes" must be an array.\x1b[0m`);
+        isValid = false;
+      } else {
+        for (let j = 0; j < item.volumes.length; j++) {
+          const vol = item.volumes[j];
+          if (typeof vol !== 'object' || vol === null) {
+            console.error(`\x1b[31mError ${indexStr} -> volume ${j}: Volume must be an object.\x1b[0m`);
+            isValid = false;
+          } else if (!vol.title || typeof vol.title !== 'string') {
+            console.error(`\x1b[31mError ${indexStr} -> volume ${j}: Volume is missing a "title" string.\x1b[0m`);
+            isValid = false;
+          }
+        }
+      }
+    }
+  }
+
+  return isValid;
 }
 
 /**
@@ -70,9 +133,13 @@ function run() {
 
   // Load new database
   if (!fs.existsSync(NEW_DB_PATH)) {
-    console.log(`\x1b[33mWarning: "${NEW_DB_PATH}" not found at project root.\x1b[0m`);
-    console.log(`Please place your new/partial JSON file at the root named \x1b[36mnew-data.json\x1b[0m and run the script again.`);
-    console.log(`\nAlternatively, specify a custom path: \x1b[90mnode scripts/sync-novels.js <path-to-json>\x1b[0m`);
+    console.error(`\x1b[31mError: File not found at "${NEW_DB_PATH}"\x1b[0m`);
+    if (customPath) {
+      console.log(`Please ensure the path you provided is correct: \x1b[36m${customPath}\x1b[0m`);
+    } else {
+      console.log(`Please place your new/partial JSON file at the root named \x1b[36mnew-data.json\x1b[0m and run the script again.`);
+      console.log(`\nAlternatively, specify a custom path: \x1b[90mnode scripts/sync-novels.js <path-to-json>\x1b[0m`);
+    }
     process.exit(1);
   }
 
@@ -80,6 +147,13 @@ function run() {
   if (!newDb) {
     process.exit(1);
   }
+
+  // Validate database schema
+  if (!validateJSONSchema(newDb, NEW_DB_PATH)) {
+    console.error('\x1b[31mValidation failed: The input JSON file contains schema errors.\x1b[0m');
+    process.exit(1);
+  }
+
   console.log(`Loaded \x1b[36m${newDb.length}\x1b[0m novels from the new/partial file.\n`);
 
   // Build lookup index for main DB
@@ -247,7 +321,7 @@ function run() {
   }
 
   if (newNovels.length === 0 && updatedNovels.length === 0) {
-    console.log('\x1b[32m✓ No new titles or volume updates found. Your main database is up to date with new-data.json!\x1b[0m\n');
+    console.log(`\x1b[32m✓ No new titles or volume updates found. Your main database is up to date with ${path.basename(NEW_DB_PATH)}!\x1b[0m\n`);
     return;
   }
 
@@ -302,7 +376,8 @@ function run() {
     console.log(`Run \x1b[36mnpm run dev\x1b[0m to test the changes in the UI.`);
   } else {
     console.log('💡 \x1b[36mTip:\x1b[0m To merge these changes automatically into your database, run:');
-    console.log('   \x1b[1mnode scripts/sync-novels.js --merge\x1b[0m\n');
+    const pathArg = customPath ? ` ${customPath}` : '';
+    console.log(`   \x1b[1mnode scripts/sync-novels.js${pathArg} --merge\x1b[0m\n`);
   }
 }
 

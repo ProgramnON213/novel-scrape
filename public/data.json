@@ -8229,7 +8229,7 @@
     "addToFav": "no",
     "synopsis": "Before Horizon, humanity ascended to the heavens, but how exactly did that happen? Kawakami’s new series explores the Edge era in which legends must be recreated to reshape a distant planet.",
     "notes": "",
-    "volumesCount": "2",
+    "volumesCount": "4",
     "volumes": [
       {
         "title": "Volume 1A",
@@ -8240,6 +8240,16 @@
         "title": "Volume 2A",
         "link1": "https://link-center.net/735289/volume-2a-epub",
         "link2": "https://link-target.net/735289/volume-2b-pdf"
+      },
+      {
+        "title": "Volume 1B",
+        "link1": "https://link-target.net/735289/volume-1b-epub",
+        "link2": "https://link-target.net/735289/volume-1b-pdf"
+      },
+      {
+        "title": "Volume 2B",
+        "link1": "https://link-target.net/735289/volume-2b-epub",
+        "link2": "https://link-center.net/735289/volume-2b-pdf1"
       }
     ]
   },
@@ -13021,26 +13031,26 @@
   {
     "id": "1000017",
     "title": "The Cheerful Girlfriend With a Broken Sense of Distance",
-    "cover": "https://animestuff.me/docs/assets/html/img/Yo-Kya-na-Kanojo-wa-Kyori-Kan-ga-Bagutteiru-Deatte-Soku-o-Mochikaeri-Shicha-Damena-no.png",
+    "cover": "https://m.media-amazon.com/images/I/71KycnGCwqL._SL1500_.jpg",
     "type": "Light Novel",
     "status": "Ongoing",
     "genre": "Comedy, Romance, School Life, Slice of Life",
-    "alternative": "N/A",
-    "authors": "N/A",
-    "artist": "N/A",
+    "alternative": "陽キャなカノジョは距離感がバグっている 出会って即お持ち帰りしちゃダメなの?",
+    "authors": "枩 葉松",
+    "artist": "ハム",
     "publisher": "N/A",
-    "translationGroup": "N/A",
-    "synopsis": "<p><p>An adolescent school caste love comedy at the mercy of an overly daring girlfriend!</p>\n\n<p>Sasagawa Ayano is the flower of the class. When he accidentally saves her from being picked up&mdash;</p>\n\n<p>&quot;Thank you, Fujimura.&quot;</p>\n\n<p>Since then, she brings me home on holidays, asks me to praise her like a kid, or stay and sleep over.</p>\n\n<p>I thought I was enjoying my life as a loner in the shadows, but then I realized that her presence had become a part of my daily life...</p>\n\n<p>I am a gloomy guy, and I never thought she would remember my name! On top of that, she became oddly affectionate toward me and started to visit...?!</p>\n\n<p>&quot;You're coming home again today, right?&quot;</p>\n\n<p>&quot;A loner? Then I'll have you all to myself!&quot;</p>\n\n<p>&quot;...Shouldn't I think you're special?&quot;</p>\n\n<p>He thought she was from a distant world, but now she's zero distance away.</p>\n\n<p>This is a youth caste love comedy in which he's at the mercy of a girl who is too daring!</p>",
+    "translationGroup": "Drowsic",
+    "synopsis": "An adolescent school caste love comedy at the mercy of an overly daring girlfriend!<br/>Sasagawa Ayano is the flower of the class. When he accidentally saves her from being picked up—<br/><br/>“Thank you, Fujimura.”<br/><br/>Since then, she brings me home on holidays, asks me to praise her like a kid, or stay and sleep over.<br/><br/>I thought I was enjoying my life as a loner in the shadows, but then I realized that her presence had become a part of my daily life…<br/><br/>I am a gloomy guy, and I never thought she would remember my name! On top of that, she became oddly affectionate toward me and started to visit…?!<br/><br/>“You’re coming home again today, right?”<br/><br/>“A loner? Then I’ll have you all to myself!”<br/><br/>“…Shouldn’t I think you’re special?”<br/><br/>He thought she was from a distant world, but now she’s zero distance away.<br/><br/>This is a youth caste love comedy in which he’s at the mercy of a girl who is too daring!",
     "notes": "",
     "recommended": "no",
-    "newUpdate": "no",
+    "newUpdate": "yes",
     "addToFav": "no",
     "volumesCount": "1",
     "volumes": [
       {
         "title": "Volume 1",
-        "link1": "https://link-target.net/718937/lBijgaltrGbi",
-        "link2": "https://direct-link.net/718937/ccXgc6zhLKmE"
+        "link1": "https://direct-link.net/735289/nEIXyOYqGvZJ",
+        "link2": "https://direct-link.net/735289/pMgSeM4o7vSO"
       }
     ]
   },

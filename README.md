@@ -124,11 +124,38 @@ Serves the `dist/` folder at `http://localhost:4173` to verify the production bu
 
 ## 🔄 Updating the Novel Database
 
+The novel database (`public/data.json`) can be updated manually or by merging updates from another JSON file using the built-in CLI tool.
+
+### Option 1: Manual Update
 1. Open `public/data.json`.
 2. Add, edit, or remove novel objects following the schema above.
 3. Commit and push to `main` — the GitHub Actions workflow will rebuild and redeploy automatically.
 
-> **`data.json` lives in `public/`** so Vite copies it verbatim into `dist/` without bundling it. This keeps it easy to diff and edit in-place.
+### Option 2: Automated Sync & Merge Script
+If you have a separate JSON file containing new novels or volume link updates, you can compare and merge it automatically.
+
+1. **Compare/Dry-run**:
+   - To compare with `new-data.json` at root:
+     ```bash
+     npm run sync
+     ```
+   - To compare with a **custom path**:
+     ```bash
+     node scripts/sync-novels.js path/to/your-file.json
+     ```
+
+2. **Merge Changes**:
+   - To execute the merge and update `public/data.json` (this automatically validates the schema and creates a database backup in `backup/`):
+     - With root `new-data.json`:
+       ```bash
+       npm run sync:merge
+       ```
+     - With a **custom path**:
+       ```bash
+       node scripts/sync-novels.js path/to/your-file.json --merge
+       ```
+
+> **`data.json` lives in `public/`** so Vite copies it verbatim into `dist/` without bundling it. This keeps it easy to diff, edit, and sync in-place.
 
 ---
 
