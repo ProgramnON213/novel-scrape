@@ -55,6 +55,7 @@ const syncModal       = document.getElementById('syncModal');
 const syncModalBody   = document.getElementById('syncModalBody');
 const syncCloseBtn    = document.getElementById('syncCloseBtn');
 const qrFileInput     = document.getElementById('qrFileInput');
+const siteTitle       = document.querySelector('header h1');
 
 /* ============================================================
    SETTINGS — LOAD / SAVE / DEFAULTS
@@ -139,7 +140,7 @@ async function init() {
   }
 
   try {
-    const response = await fetch(`${import.meta.env.BASE_URL}data.json`);
+    const response = await fetch(`${import.meta.env.BASE_URL}data.json?t=${new Date().getTime()}`);
     novelsData = await response.json();
     buildTagSystem();
     applyFilters();
@@ -200,6 +201,31 @@ function clearAllTags() {
   Object.keys(tagStates).forEach(tag => { tagStates[tag] = 'neutral'; });
   document.querySelectorAll('.tag-pill').forEach(pill => { pill.dataset.state = 'neutral'; });
   updateTagUI();
+  applyFilters();
+}
+
+function resetAllFilters() {
+  // Clear search input
+  searchInput.value = '';
+  
+  // Clear tag states & UI
+  Object.keys(tagStates).forEach(tag => { tagStates[tag] = 'neutral'; });
+  document.querySelectorAll('.tag-pill').forEach(pill => { pill.dataset.state = 'neutral'; });
+  updateTagUI();
+
+  // Reset library filter to 'all'
+  activeLibFilter = 'all';
+  libPills.forEach(pill => {
+    pill.classList.toggle('active', pill.dataset.lib === 'all');
+  });
+
+  // Close modals
+  closeModal();
+  if (syncModal && syncModal.classList.contains('show')) {
+    syncModal.classList.remove('show');
+  }
+
+  // Re-apply filters
   applyFilters();
 }
 
@@ -633,6 +659,11 @@ tagToggleBtn.addEventListener('click', () => {
 });
 clearTagsBtn.addEventListener('click', clearAllTags);
 searchInput.addEventListener('input', applyFilters);
+
+// Header / Title reset
+if (siteTitle) {
+  siteTitle.addEventListener('click', resetAllFilters);
+}
 
 // Modal
 closeBtn.addEventListener('click', closeModal);
