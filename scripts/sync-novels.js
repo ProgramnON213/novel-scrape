@@ -123,6 +123,7 @@ const GENRE_MAPPINGS = {
   'sliceoflife': 'Slice of Life',
   'slice of life': 'Slice of Life',
   'schoollife': 'School Life',
+  'school-life': 'School Life',
   'school life': 'School Life',
   'martialarts': 'Martial Arts',
   'martial arts': 'Martial Arts',
@@ -142,17 +143,64 @@ const GENRE_MAPPINGS = {
   'historical': 'Historical',
   'mystery': 'Mystery',
   'supernatural': 'Supernatural',
-  'tragedy': 'Tragedy'
+  'tragedy': 'Tragedy',
+  'tradegy': 'Tragedy'
 };
+
+const VALID_TAGS = new Set([
+  'Action',
+  'Adult',
+  'Adventure',
+  'Age Gap',
+  'Antihero Protagonist',
+  'Apocalypse',
+  'Comedy',
+  'Dark Fantasy',
+  'Dragon',
+  'Drama',
+  'Ecchi',
+  'Fantasy',
+  'Gender Bender',
+  'Harem',
+  'Historical',
+  'Horror',
+  'Isekai',
+  'Josei',
+  'Magic',
+  'Martial Arts',
+  'Mature',
+  'Mecha',
+  'Mystery',
+  'Psychological',
+  'Romance',
+  'School Life',
+  'Sci-fi',
+  'Seinen',
+  'Shoujo',
+  'Shoujo Ai',
+  'Shounen',
+  'Shounen Ai',
+  'Slice of Life',
+  'Smut',
+  'Supernatural',
+  'Tragedy',
+  'Yuri'
+]);
+
+const VALID_TAGS_MAP = {};
+for (const tag of VALID_TAGS) {
+  VALID_TAGS_MAP[tag.toLowerCase()] = tag;
+}
 
 /**
  * Standardizes genre names to match the database conventions (e.g. Scifi -> Sci-fi, casing, etc.) and sorts them.
+ * Supports comma and dot delimiters.
  */
 function normalizeGenres(genreStr) {
   if (!genreStr || typeof genreStr !== 'string') return '';
   
   const normalizedList = genreStr
-    .split(',')
+    .split(/[.,]/)
     .map(g => {
       const trimmed = g.trim();
       const lower = trimmed.toLowerCase();
@@ -160,6 +208,11 @@ function normalizeGenres(genreStr) {
       // Check in mappings
       if (GENRE_MAPPINGS[lower]) {
         return GENRE_MAPPINGS[lower];
+      }
+
+      // Check in valid tags map
+      if (VALID_TAGS_MAP[lower]) {
+        return VALID_TAGS_MAP[lower];
       }
       
       // Fallback: title case the genre words (e.g. "slice of life" -> "Slice of Life")
@@ -172,6 +225,32 @@ function normalizeGenres(genreStr) {
     
   // Sort alphabetically to maintain consistency across the entire DB
   return Array.from(new Set(normalizedList)).sort().join(', ');
+}
+
+/**
+ * Checks if all tags/genres in the genre string are valid.
+ * A tag is valid if it is in the VALID_TAGS set or has a known mapping.
+ * Returns { isValid: boolean, invalidTags: string[] }
+ */
+function checkTagsValidity(genreStr) {
+  if (!genreStr) return { isValid: true, invalidTags: [] };
+  const tags = genreStr.split(/[.,]/).map(g => g.trim()).filter(Boolean);
+  const invalidTags = [];
+  
+  for (const tag of tags) {
+    const lower = tag.toLowerCase();
+    const mapped = GENRE_MAPPINGS[lower];
+    const isDirectValid = VALID_TAGS_MAP[lower];
+    
+    if (!mapped && !isDirectValid) {
+      invalidTags.push(tag);
+    }
+  }
+  
+  return {
+    isValid: invalidTags.length === 0,
+    invalidTags
+  };
 }
 
 /**
@@ -248,6 +327,14 @@ function run() {
     console.error('\x1b[31mCannot proceed without the main database (public/data.json).\x1b[0m');
     process.exit(1);
   }
+
+  // Normalize main database genres to clean up any legacy typos on load
+  mainDb.forEach(novel => {
+    if (novel.genre) {
+      novel.genre = normalizeGenres(novel.genre);
+    }
+  });
+
   console.log(`Loaded \x1b[36m${mainDb.length}\x1b[0m novels from the main database.`);
 
   // Load new database
@@ -312,12 +399,41 @@ function run() {
       mainIndex = normalizedTitleMap.get(normalizeString(newNovel.title));
     }
 
+    const existingNovel = mainIndex !== -1 ? mainDb[mainIndex] : null;
+
+    // Check and filter tags before suggesting merge / comparison
+    if (newNovel.genre) {
+      const { isValid, invalidTags } = checkTagsValidity(newNovel.genre);
+      if (!isValid) {
+        if (existingNovel) {
+          console.log(`\x1b[33m⚠️  [Tag Filter] "${newNovel.title}" contains invalid tags: [${invalidTags.join(', ')}]. Keeping old tags: "${existingNovel.genre || 'None'}"\x1b[0m`);
+          newNovel.genre = existingNovel.genre || '';
+        } else {
+          // New novel - try to remove invalid ones and keep only valid/corrected ones
+          const cleanGenres = newNovel.genre.split(/[.,]/)
+            .map(g => g.trim())
+            .filter(Boolean)
+            .map(g => {
+              const lower = g.toLowerCase();
+              return GENRE_MAPPINGS[lower] || VALID_TAGS_MAP[lower] || null;
+            })
+            .filter(Boolean);
+          
+          const cleanGenreStr = Array.from(new Set(cleanGenres)).sort().join(', ');
+          console.log(`\x1b[33m⚠️  [Tag Filter] New novel "${newNovel.title}" contains invalid tags: [${invalidTags.join(', ')}]. Discarding invalid tags, keeping: "${cleanGenreStr}"\x1b[0m`);
+          newNovel.genre = cleanGenreStr;
+        }
+      } else {
+        // Tag is valid or fully correctable, normalize it to proper casing/sorting
+        newNovel.genre = normalizeGenres(newNovel.genre);
+      }
+    }
+
     if (mainIndex === -1) {
       // It's a brand new novel
       newNovels.push(newNovel);
     } else {
       // Exist in main DB - compare details
-      const existingNovel = mainDb[mainIndex];
       const volumeChanges = [];
       const fieldChanges = [];
 
