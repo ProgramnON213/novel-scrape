@@ -143,6 +143,15 @@ async function init() {
   try {
     const response = await fetch(`${import.meta.env.BASE_URL}data.json?t=${new Date().getTime()}`);
     novelsData = await response.json();
+
+    // Pre-lowercase fields for high-performance search filtering
+    novelsData.forEach(novel => {
+      novel._lowercaseTitle = novel.title.toLowerCase();
+      novel._lowercaseAlternative = novel.alternative ? novel.alternative.toLowerCase() : '';
+      novel._lowercaseGenre = novel.genre ? novel.genre.toLowerCase() : '';
+      novel._lowercaseAuthors = novel.authors ? novel.authors.toLowerCase() : '';
+    });
+
     buildTagSystem();
     applyFilters();
   } catch (error) {
@@ -165,6 +174,7 @@ function buildTagSystem() {
   const sortedGenres = [...allGenres].sort();
   tagContainer.innerHTML = '';
 
+  const fragment = document.createDocumentFragment();
   sortedGenres.forEach(genre => {
     tagStates[genre] = 'neutral';
     const pill = document.createElement('span');
@@ -173,8 +183,9 @@ function buildTagSystem() {
     pill.dataset.state = 'neutral';
     pill.textContent = genre;
     pill.addEventListener('click', () => cycleTagState(genre, pill));
-    tagContainer.appendChild(pill);
+    fragment.appendChild(pill);
   });
+  tagContainer.appendChild(fragment);
 }
 
 function cycleTagState(tag, pill) {
@@ -272,13 +283,13 @@ function applyFilters() {
     const isBroken = !novel.cover || novel.cover === '' || brokenCovers.has(novel.id);
     if (settings.hideNoCover && isBroken) return false;
 
-    // Text search
+    // Text search (high performance via pre-lowercased fields)
     if (term) {
       const matches =
-        novel.title.toLowerCase().includes(term) ||
-        (novel.alternative && novel.alternative.toLowerCase().includes(term)) ||
-        (novel.genre && novel.genre.toLowerCase().includes(term)) ||
-        (novel.authors && novel.authors.toLowerCase().includes(term));
+        novel._lowercaseTitle.includes(term) ||
+        novel._lowercaseAlternative.includes(term) ||
+        novel._lowercaseGenre.includes(term) ||
+        novel._lowercaseAuthors.includes(term);
       if (!matches) return false;
     }
 
@@ -337,6 +348,7 @@ function renderGrid(novels) {
     return;
   }
 
+  const fragment = document.createDocumentFragment();
   novels.forEach(novel => {
     const entry = getLibEntry(novel.id);
     const readVols = getProgress(novel.id);
@@ -385,8 +397,9 @@ function renderGrid(novels) {
     });
 
     card.addEventListener('click', () => openModal(novel));
-    grid.appendChild(card);
+    fragment.appendChild(card);
   });
+  grid.appendChild(fragment);
 }
 
 /* ============================================================
