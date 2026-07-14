@@ -278,6 +278,19 @@ function mergeAndSortGenres(existingGenreStr, newGenreStr) {
   return Array.from(combinedSet).sort().join(', ');
 }
 
+function cleanTitle(title) {
+  if (!title) return '';
+  let cleaned = title;
+  // Collapse long sequences of repeating mojibake characters to a single apostrophe
+  cleaned = cleaned.replace(/[\u0080-\u00FF]{5,}/g, "'");
+  // Normalize extra/weird spaces
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  // Turn "I' m" or "I' m" into "I'm"
+  cleaned = cleaned.replace(/\bI'\s+m\b/gi, "I'm");
+  cleaned = cleaned.replace(/\bI'\s+Cheating\b/gi, "I'm Cheating");
+  return cleaned;
+}
+
 /**
  * Normalizes novel data from external sources (like animeStuff) to conform to the standard schema.
  */
@@ -288,6 +301,11 @@ function normalizeNovelData(data) {
     if (typeof item !== 'object' || item === null) return item;
     
     const normalized = { ...item };
+    
+    // Heal corrupted title if any
+    if (normalized.title) {
+      normalized.title = cleanTitle(normalized.title);
+    }
     
     // Convert 'genres' array to comma-separated 'genre' string
     if (Array.isArray(normalized.genres)) {
@@ -331,8 +349,11 @@ function run() {
     process.exit(1);
   }
 
-  // Normalize main database genres to clean up any legacy typos on load
+  // Normalize main database titles and genres to clean up any legacy typos on load
   mainDb.forEach(novel => {
+    if (novel.title) {
+      novel.title = cleanTitle(novel.title);
+    }
     if (novel.genre) {
       novel.genre = normalizeGenres(novel.genre);
     }
