@@ -8,7 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "sync": "node scripts/sync-novels.js",
-    "sync:merge": "node scripts/sync-novels.js --merge"
+    "sync:merge": "node scripts/sync-novels.js --merge",
+    "sync:animestuff": "node scripts/sync-animestuff.js",
+    "sync:animestuff:merge": "node scripts/sync-animestuff.js --merge",
+    "clean": "node scripts/clean-data.js",
+    "clean:write": "node scripts/clean-data.js --write"
   },
   "keywords": [],
   "author": "",

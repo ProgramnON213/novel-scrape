@@ -155,6 +155,46 @@ If you have a separate JSON file containing new novels or volume link updates, y
        node scripts/sync-novels.js path/to/your-file.json --merge
        ```
 
+### Option 2b: Import from animeStuff Catalogue
+If you want to import *new* novels from an animeStuff catalogue JSON (which has a different schema including a flat `genres` array and a source page `url`), you can use the dedicated animeStuff import tool. This will import them as metadata-only entries and save the source link under `sourceUrl`. Match and merge will skip existing novels automatically.
+
+1. **Compare/Dry-run**:
+   - To compare with `animestuff-data.json` at root:
+     ```bash
+     npm run sync:animestuff
+     ```
+   - To compare with a **custom path**:
+     ```bash
+     node scripts/sync-animestuff.js path/to/your-file.json
+     ```
+
+2. **Merge Changes**:
+   - To execute the merge (assigns new sequential IDs, creates a timestamped backup, and prepends the new novels to `public/data.json`):
+     - With root `animestuff-data.json`:
+       ```bash
+       npm run sync:animestuff:merge
+       ```
+     - With a **custom path**:
+       ```bash
+       node scripts/sync-animestuff.js path/to/your-file.json --merge
+       ```
+
+
+### Option 3: Database Cleansing & Pruning Script
+To keep the database clean, standard, and free of redundant entries or placeholders:
+
+1. **Compare/Dry-run (Preview)**:
+   - To preview title corrections, genre tag normalization, duplicates detection, and empty entry pruning without modifying the database:
+     ```bash
+     npm run clean
+     ```
+
+2. **Execute Clean (Write)**:
+   - To execute the changes, save them to `public/data.json`, and generate a backup in `backup/`:
+     ```bash
+     npm run clean:write
+     ```
+
 > **`data.json` lives in `public/`** so Vite copies it verbatim into `dist/` without bundling it. This keeps it easy to diff, edit, and sync in-place.
 
 ---

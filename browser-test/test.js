@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import path from 'path';
 
-const ARTIFACTS_DIR = 'C:/Users/khach/.gemini/antigravity/brain/64d5dbd1-0a2f-4588-9a03-e47ad3414871';
+const ARTIFACTS_DIR = 'C:/Users/khach/.gemini/antigravity/brain/5d02d9c3-8430-4e5a-8b95-c4f2fe141d3d';
 
 async function run() {
   console.log('Launching browser...');

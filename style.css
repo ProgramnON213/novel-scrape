@@ -943,6 +943,28 @@ h1:hover {
   box-shadow: 0 0 10px rgba(255, 127, 80, 0.4);
 }
 
+/* ---- Source / External Site Link ---- */
+.source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid var(--accent-teal, #2dd4bf);
+  background: rgba(45, 212, 191, 0.08);
+  color: #5eead4;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.source-link:hover {
+  background: rgba(45, 212, 191, 0.18);
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.3);
+  color: #99f6e4;
+}
+
 /* ---- Copy Action Buttons ---- */
 .copy-actions {
   display: flex;
