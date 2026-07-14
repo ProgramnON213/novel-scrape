@@ -155,6 +155,21 @@ If you have a separate JSON file containing new novels or volume link updates, y
        node scripts/sync-novels.js path/to/your-file.json --merge
        ```
 
+### Option 3: Database Cleansing & Pruning Script
+To keep the database clean, standard, and free of redundant entries or placeholders:
+
+1. **Compare/Dry-run (Preview)**:
+   - To preview title corrections, genre tag normalization, duplicates detection, and empty entry pruning without modifying the database:
+     ```bash
+     npm run clean
+     ```
+
+2. **Execute Clean (Write)**:
+   - To execute the changes, save them to `public/data.json`, and generate a backup in `backup/`:
+     ```bash
+     npm run clean:write
+     ```
+
 > **`data.json` lives in `public/`** so Vite copies it verbatim into `dist/` without bundling it. This keeps it easy to diff, edit, and sync in-place.
 
 ---

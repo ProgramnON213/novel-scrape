@@ -132,11 +132,14 @@ function loadJSON(filePath) {
   }
 }
 
+/**
+ * Heals extremely corrupted title encoding (multi-roundtrip mojibake).
+ */
 function cleanTitle(title) {
   if (!title) return '';
   let cleaned = title;
   // Collapse long sequences of repeating mojibake characters to a single apostrophe
-  cleaned = cleaned.replace(/[\u0080-\u00FF]{5,}/g, "'");
+  cleaned = cleaned.replace(/[ÃÂ¢â\u0080-\u00FF\u0100-\uFFFF]{5,}/g, "'");
   // Normalize extra/weird spaces
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
   // Turn "I' m" or "I' m" into "I'm"
