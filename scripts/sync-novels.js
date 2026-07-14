@@ -1,9 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // File paths
-const MAIN_DB_PATH = path.resolve('public/data.json');
-const BACKUP_DIR = path.resolve('backup');
+const MAIN_DB_PATH = path.resolve(__dirname, '../public/data.json');
+const BACKUP_DIR = path.resolve(__dirname, '../backup');
 
 // Help message check
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
@@ -17,7 +20,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 // Parse custom path from CLI arguments
 const args = process.argv.slice(2).filter(arg => arg !== '--merge');
 const customPath = args.length > 0 ? args[0] : null;
-const NEW_DB_PATH = customPath ? path.resolve(customPath) : path.resolve('new-data.json');
+const NEW_DB_PATH = customPath ? path.resolve(customPath) : path.resolve(__dirname, '../new-data.json');
 
 /**
  * Normalizes a string for robust matching.
@@ -406,8 +409,21 @@ function run() {
       const { isValid, invalidTags } = checkTagsValidity(newNovel.genre);
       if (!isValid) {
         if (existingNovel) {
-          console.log(`\x1b[33m⚠️  [Tag Filter] "${newNovel.title}" contains invalid tags: [${invalidTags.join(', ')}]. Keeping old tags: "${existingNovel.genre || 'None'}"\x1b[0m`);
-          newNovel.genre = existingNovel.genre || '';
+          // Filter incoming tags to discard only invalid ones
+          const cleanIncoming = newNovel.genre.split(/[.,]/)
+            .map(g => g.trim())
+            .filter(Boolean)
+            .map(g => {
+              const lower = g.toLowerCase();
+              return GENRE_MAPPINGS[lower] || VALID_TAGS_MAP[lower] || null;
+            })
+            .filter(Boolean);
+
+          const cleanIncomingStr = Array.from(new Set(cleanIncoming)).sort().join(', ');
+          const mergedStr = mergeAndSortGenres(existingNovel.genre, cleanIncomingStr);
+
+          console.log(`\x1b[33m⚠️  [Tag Filter] "${newNovel.title}" contains invalid tags: [${invalidTags.join(', ')}]. Discarding invalid tags, merged clean tags: "${mergedStr}"\x1b[0m`);
+          newNovel.genre = mergedStr;
         } else {
           // New novel - try to remove invalid ones and keep only valid/corrected ones
           const cleanGenres = newNovel.genre.split(/[.,]/)
