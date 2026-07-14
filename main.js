@@ -448,6 +448,13 @@ function openModal(novel) {
     volumesHtml = '<h3>Download Volumes</h3><p>No volumes available.</p>';
   }
 
+  // --- AnimeStuff source link (shown if novel has a sourceUrl) ---
+  const sourceUrlHtml = novel.sourceUrl
+    ? `<a href="${sanitizeUrl(novel.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="source-link animestuff-link">
+        🔗 Read on AnimeStuff
+      </a>`
+    : '';
+
   // --- Copy buttons ---
   let copyButtonsHtml = '';
   if (novel.volumes && novel.volumes.length > 0) {
@@ -522,6 +529,7 @@ function openModal(novel) {
         <div class="synopsis">${escapeSynopsis(novel.synopsis) || 'No synopsis available.'}</div>
         ${volumesHtml}
         ${copyButtonsHtml}
+        ${sourceUrlHtml}
       </div>
     </div>
   `;
