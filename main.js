@@ -1115,7 +1115,12 @@ BEGIN
   ON CONFLICT (id) DO UPDATE
   SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at;
 END;
-$$;</code></pre>
+$$;
+
+-- Grant the anon role permission to call the RPC functions
+-- (direct table access remains revoked)
+GRANT EXECUTE ON FUNCTION get_sync_data(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION set_sync_data(TEXT, TEXT) TO anon;</code></pre>
           </div>
         </div>
         

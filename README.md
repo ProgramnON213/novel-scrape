@@ -15,7 +15,7 @@ A sleek, dark-themed static web app for browsing and downloading a personal ligh
 | **Bulk copy** | "Copy All EPUB Links" / "Copy All PDF Links" buttons for mass downloading |
 | **Glassmorphism UI** | Dark background with purple / orange gradient accents, backdrop blur effects |
 | **Responsive** | Works on mobile and desktop; modal collapses to a single column on small screens |
-| **Zero runtime deps** | No frameworks, no external JS libraries — Vite is a dev/build tool only |
+| **Zero runtime deps** | No frameworks at runtime — `qrious` is bundled by Vite for local QR code generation; no external requests needed |
 | **❤️ Favorites & Reading Status** | Mark novels as favorites and categorize them (Reading / Plan to Read / Completed / Dropped); filter the grid by library category via pill buttons |
 | **🔖 Volume Progress Tracking** | Check off individual volumes as read; progress shown as `X/Y read` in the modal and on each card |
 | **🎨 Themes** | Three built-in themes — *Midnight Abyss* (default), *Sakura Cozy*, *Cyberpunk Neon* — switchable from the header |
@@ -166,39 +166,68 @@ To sync your library across devices securely without creating a password-based a
 ### 🔒 Zero-Knowledge Security
 * All settings and progress are encrypted in your browser using the **AES-GCM Web Crypto API** before upload.
 * The decryption key (your **Sync Key**) remains on your device and is **never** sent to the cloud database.
-* The database host only stores encrypted text, meaning it is mathematically impossible for anyone to read your data in the event of a database leak.
+* The database host only stores encrypted text — mathematically impossible to read in the event of a leak.
+* Direct table access is **revoked** from all roles. The app can only call narrow, `SECURITY DEFINER` RPC functions, preventing enumeration or bulk data reads.
 
 ### 🛠️ Setup Instructions
 
 1. **Create a Free Supabase Project**:
    Sign up at [Supabase](https://supabase.com) and create a new project.
-2. **Create the Database Table**:
-   Open the **SQL Editor** in your Supabase dashboard, paste the following SQL commands, and click **Run**:
+
+2. **Create the Database Table & Secure RPC Functions**:
+   Open the **SQL Editor** in your Supabase dashboard, open a **New query**, paste the SQL below, and click **Run**:
    ```sql
-   create table public.sync_data (
-     id text primary key, -- SHA-256 hash of the Sync Key
-     payload text not null, -- Encrypted JSON payload
-     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+   CREATE TABLE public.sync_data (
+     id TEXT PRIMARY KEY,          -- SHA-256 hash of your Sync Key
+     payload TEXT NOT NULL,        -- AES-GCM encrypted JSON payload
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
    );
 
-   -- Enable Row Level Security
-   alter table public.sync_data enable row level security;
+   -- Enable Row Level Security and revoke all default public table access
+   ALTER TABLE public.sync_data ENABLE ROW LEVEL SECURITY;
+   REVOKE SELECT, INSERT, UPDATE, DELETE ON public.sync_data FROM anon, authenticated;
 
-   -- Allow anonymous access to payloads (since data is fully client-side encrypted anyway)
-   create policy "Allow anon select" on public.sync_data for select using (true);
-   create policy "Allow anon insert" on public.sync_data for insert with check (true);
-   create policy "Allow anon update" on public.sync_data for update using (true);
+   -- Secure read RPC: only returns the row whose id exactly matches the provided key hash
+   CREATE OR REPLACE FUNCTION get_sync_data(lookup_id TEXT)
+   RETURNS TABLE (id TEXT, payload TEXT, updated_at TIMESTAMP WITH TIME ZONE)
+   LANGUAGE plpgsql
+   SECURITY DEFINER
+   AS $$
+   BEGIN
+     RETURN QUERY SELECT s.id, s.payload, s.updated_at
+       FROM public.sync_data s WHERE s.id = lookup_id;
+   END;
+   $$;
+
+   -- Secure upsert RPC: inserts or updates only the row matching the provided key hash
+   CREATE OR REPLACE FUNCTION set_sync_data(lookup_id TEXT, new_payload TEXT)
+   RETURNS VOID
+   LANGUAGE plpgsql
+   SECURITY DEFINER
+   AS $$
+   BEGIN
+     INSERT INTO public.sync_data (id, payload, updated_at)
+     VALUES (lookup_id, new_payload, now())
+     ON CONFLICT (id) DO UPDATE
+       SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at;
+   END;
+   $$;
+
+   -- Grant anonymous users permission to call the RPC functions (table access remains revoked)
+   GRANT EXECUTE ON FUNCTION get_sync_data(TEXT) TO anon;
+   GRANT EXECUTE ON FUNCTION set_sync_data(TEXT, TEXT) TO anon;
    ```
-3. **Configure Environment Variables**:
-   In your repository root, create a `.env` file (or set GitHub Repository Secrets for automatic deployments) containing:
-   ```env
-   VITE_SUPABASE_URL=your_supabase_project_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_publishable_key
-   ```
-   *Note: `VITE_SUPABASE_ANON_KEY` represents your Supabase project's client-side **Publishable API Key** (also referred to as the anon key).*
+   > **Why RPCs instead of direct table access?**  
+   > Revoking table access and exposing only narrow, parameterized functions prevents any client from listing, enumerating, or bulk-reading sync payloads belonging to other keys. Combined with client-side AES-GCM encryption, this makes the setup genuinely zero-knowledge.
+
+3. **Enter Credentials in the App**:
+   In your Supabase project go to **Settings → API**. Copy your **Project URL** and **Anon / Publishable Key**, then open the **Sync** panel in the app and paste them into the **Developer Credentials** section.
+
 4. **Link Devices**:
-   - Open **Sync** on one device and click **Generate New Sync Key** (which will display a Sync Key and QR Code).
-   - Open the app on another device, click **Sync**, and scan the QR code (using camera stream or by uploading a screenshot of it), or paste the plain text key.
+   - On the first device: open **Sync** → click **Generate New Sync Key**. A Sync Key and QR code (generated locally — nothing is sent externally) will appear.
+   - On additional devices: open **Sync** → scan the QR code with your camera or by uploading a screenshot of it, or paste the plain text key.
+
+> ⚠️ **Keep your Sync Key safe.** Anyone with the key can decrypt your library data. There is no password-recovery mechanism — the key itself is the credential.
 
 ---
 
@@ -235,15 +264,17 @@ All design tokens live in the `:root` block of `style.css`:
 
 ## 🏗️ Architecture Notes for AI Agents
 
-- **`main.js` is a single module** — no bundler-split chunks or imports. All logic lives here: `init()`, `buildTagSystem()`, `cycleTagState()`, `applyFilters()`, `renderGrid()`, `openModal()`, `exportBackup()`, `importBackup()`.
+- **`main.js` is a single module** — no bundler-split chunks or imports. All core logic lives here: `init()`, `buildTagSystem()`, `cycleTagState()`, `applyFilters()`, `renderGrid()`, `openModal()`, `exportBackup()`, `importBackup()`. `qrious` is dynamically imported only when the sync modal is opened.
 - **Data flow:** `fetch(data.json)` → `novelsData[]` → `buildTagSystem()` populates `tagStates{}` → `applyFilters()` recomputes the filtered list → `renderGrid()` re-renders the DOM.
 - **Tag state machine:** each genre cycles `neutral → include → exclude → neutral` on click. Filtering requires ALL included genres and NO excluded genres.
-- **Modal is a singleton** — `openModal(novel)` rebuilds `modalBody.innerHTML` each time and re-attaches copy-button listeners.
+- **Modal is a singleton** — `openModal(novel)` rebuilds `modalBody.innerHTML` each time and re-attaches copy-button listeners. All dynamic content is HTML-escaped via `escapeHTML()` / `escapeSynopsis()` before binding to prevent DOM XSS.
 - **No state management library** — mutable module-level variables (`novelsData`, `tagStates`, `activeLibFilter`) serve as the store.
 - **`import.meta.env.BASE_URL`** is used when fetching `data.json`, so it works correctly under any Vite `base` path.
 - **Personalization state** lives in a single `settings` object (`LS_SETTINGS_KEY = 'novel_settings'`) and is persisted to `localStorage`. All user data is keyed by `novel.id` (string) so it remains valid regardless of changes to `data.json`.
 - **Themes** are implemented as CSS classes on `<body>` (`.theme-sakura`, `.theme-cyberpunk`). Default *Midnight Abyss* has no class — all variables are defined on `:root`. Adding a theme class overrides them.
 - **Backup schema** is a plain JSON object with `version`, `library`, `progress`, and `theme` keys. The importer validates for `library` and `progress` keys before applying.
+- **Sync flow:** settings are AES-GCM encrypted client-side using a SHA-256 hash of the Sync Key as both the encryption key and the Supabase row ID. All Supabase calls go through secure `SECURITY DEFINER` RPC functions (`get_sync_data` / `set_sync_data`); no direct table access is permitted. An `isSyncing` boolean lock prevents overlapping sync operations.
+- **QR codes** are generated locally using the bundled `qrious` library — no external requests are made, so the Sync Key is never sent to a third-party service.
 
 ---
 
