@@ -1,0 +1,9 @@
+{
+  "name": "browser-test",
+  "version": "1.0.0",
+  "main": "test.js",
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

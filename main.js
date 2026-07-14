@@ -30,6 +30,7 @@ let activeLibFilter = 'all'; // 'all' | 'favorite' | 'Reading' | 'Plan to Read' 
 let settings = loadSettings();
 let brokenCovers = new Set(settings.brokenCovers || []);
 let filterTimeout;
+let isSyncing = false;
 
 /* ============================================================
    DOM REFS
@@ -361,12 +362,12 @@ function renderGrid(novels) {
     card.innerHTML = `
       ${readingBadge}
       ${favIcon}
-      <img src="${novel.cover}" alt="Cover of ${novel.title}" class="novel-cover-img" loading="lazy">
-      <div class="novel-title">${novel.title}</div>
+      <img src="${sanitizeUrl(novel.cover)}" alt="Cover of ${escapeHTML(novel.title)}" class="novel-cover-img" loading="lazy" width="200" height="280">
+      <div class="novel-title">${escapeHTML(novel.title)}</div>
       <div class="novel-meta">
         <span>Vols: ${novel.volumesCount || 0}</span>
         ${progressText}
-        <span class="status-badge">${novel.status || 'Unknown'}</span>
+        <span class="status-badge">${escapeHTML(novel.status || 'Unknown')}</span>
       </div>
     `;
 
@@ -432,11 +433,11 @@ function openModal(novel) {
         <div class="volume-item${isRead ? ' vol-read' : ''}" data-vol-title="${escapeAttr(vol.title)}">
           <div class="vol-left">
             <input type="checkbox" class="vol-checkbox" data-novel-id="${novel.id}" data-vol-title="${escapeAttr(vol.title)}" ${isRead ? 'checked' : ''}>
-            <span class="vol-title">${vol.title}</span>
+            <span class="vol-title">${escapeHTML(vol.title)}</span>
           </div>
           <div class="volume-links">
-            ${vol.link1 ? `<a href="${vol.link1}" target="_blank" class="epub-btn">EPUB</a>` : ''}
-            ${vol.link2 ? `<a href="${vol.link2}" target="_blank" class="pdf-btn">PDF</a>` : ''}
+            ${vol.link1 ? `<a href="${sanitizeUrl(vol.link1)}" target="_blank" class="epub-btn">EPUB</a>` : ''}
+            ${vol.link2 ? `<a href="${sanitizeUrl(vol.link2)}" target="_blank" class="pdf-btn">PDF</a>` : ''}
           </div>
         </div>
       `;
@@ -460,7 +461,7 @@ function openModal(novel) {
 
   // --- Status options ---
   const statusOptions = READING_STATUS_OPTIONS.map(s =>
-    `<option value="${s}" ${entry.status === s ? 'selected' : ''}>${s || '— None —'}</option>`
+    `<option value="${escapeAttr(s)}" ${entry.status === s ? 'selected' : ''}>${escapeHTML(s) || '— None —'}</option>`
   ).join('');
 
   // --- Build modal ---
@@ -468,7 +469,7 @@ function openModal(novel) {
     <div class="modal-body-layout">
       <!-- Left Column -->
       <div class="modal-left-col">
-        <img src="${novel.cover}" class="modal-cover" alt="Cover of ${novel.title}" onerror="this.src='https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover'">
+        <img src="${sanitizeUrl(novel.cover)}" class="modal-cover" alt="Cover of ${escapeHTML(novel.title)}">
 
         <!-- User Library Controls -->
         <div class="user-library-controls">
@@ -486,44 +487,52 @@ function openModal(novel) {
         <div class="modal-details-list">
           <div class="detail-item">
             <span class="label">Alternative</span>
-            <span>${novel.alternative || 'N/A'}</span>
+            <span>${escapeHTML(novel.alternative) || 'N/A'}</span>
           </div>
           <div class="detail-item">
             <span class="label">Authors</span>
-            <span>${novel.authors || 'N/A'}</span>
+            <span>${escapeHTML(novel.authors) || 'N/A'}</span>
           </div>
           <div class="detail-item">
             <span class="label">Artist</span>
-            <span>${novel.artist || 'N/A'}</span>
+            <span>${escapeHTML(novel.artist) || 'N/A'}</span>
           </div>
           <div class="detail-item">
             <span class="label">Genre</span>
-            <span>${novel.genre || 'N/A'}</span>
+            <span>${escapeHTML(novel.genre) || 'N/A'}</span>
           </div>
           <div class="detail-item">
             <span class="label">Type</span>
-            <span>${novel.type || 'N/A'}</span>
+            <span>${escapeHTML(novel.type) || 'N/A'}</span>
           </div>
           <div class="detail-item">
             <span class="label">Translation Group</span>
-            <span>${novel.translationGroup || 'N/A'}</span>
+            <span>${escapeHTML(novel.translationGroup) || 'N/A'}</span>
           </div>
           <div class="detail-item">
             <span class="label">Status</span>
-            <span class="status-badge" style="align-self: flex-start; margin-top: 0.2rem;">${novel.status || 'Unknown'}</span>
+            <span class="status-badge" style="align-self: flex-start; margin-top: 0.2rem;">${escapeHTML(novel.status) || 'Unknown'}</span>
           </div>
         </div>
       </div>
 
       <!-- Right Column -->
       <div class="modal-right-col">
-        <h2>${novel.title}</h2>
-        <div class="synopsis">${novel.synopsis || 'No synopsis available.'}</div>
+        <h2>${escapeHTML(novel.title)}</h2>
+        <div class="synopsis">${escapeSynopsis(novel.synopsis) || 'No synopsis available.'}</div>
         ${volumesHtml}
         ${copyButtonsHtml}
       </div>
     </div>
   `;
+
+  // Bind dynamic error listener for modal image fallback
+  const modalCoverImg = modalBody.querySelector('.modal-cover');
+  if (modalCoverImg) {
+    modalCoverImg.addEventListener('error', () => {
+      modalCoverImg.src = 'https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover';
+    });
+  }
 
   // --- Favorite toggle ---
   document.getElementById('favToggleBtn').addEventListener('click', () => {
@@ -653,6 +662,30 @@ function showToast(message, type = 'success') {
 /* ============================================================
    UTILITIES
    ============================================================ */
+function escapeHTML(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeSynopsis(str) {
+  if (!str) return '';
+  return escapeHTML(str).replace(/&lt;br\s*\/?&gt;/gi, '<br/>');
+}
+
+function sanitizeUrl(url) {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed.toLowerCase().startsWith('javascript:') || trimmed.toLowerCase().startsWith('data:')) {
+    return '#';
+  }
+  return trimmed;
+}
+
 function escapeAttr(str) {
   return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
@@ -666,7 +699,7 @@ tagToggleBtn.addEventListener('click', () => {
   tagPanel.classList.toggle('open');
 });
 clearTagsBtn.addEventListener('click', clearAllTags);
-searchInput.addEventListener('input', applyFilters);
+searchInput.addEventListener('input', scheduleRefilter);
 
 // Header / Title reset
 if (siteTitle) {
@@ -897,8 +930,14 @@ function getSupabaseConfig() {
 async function pullCloudData(lookupId) {
   const config = getSupabaseConfig();
   if (!config.url || !config.anonKey) throw new Error('Supabase configuration missing');
-  const res = await fetch(`${config.url}/rest/v1/sync_data?id=eq.${lookupId}`, {
-    headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` }
+  const res = await fetch(`${config.url}/rest/v1/rpc/get_sync_data`, {
+    method: 'POST',
+    headers: {
+      apikey: config.anonKey,
+      Authorization: `Bearer ${config.anonKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ lookup_id: lookupId })
   });
   if (!res.ok) throw new Error('Failed to fetch from cloud');
   const data = await res.json();
@@ -908,21 +947,21 @@ async function pullCloudData(lookupId) {
 async function pushCloudData(lookupId, encryptedPayload) {
   const config = getSupabaseConfig();
   if (!config.url || !config.anonKey) throw new Error('Supabase configuration missing');
-  const res = await fetch(`${config.url}/rest/v1/sync_data`, {
+  const res = await fetch(`${config.url}/rest/v1/rpc/set_sync_data`, {
     method: 'POST',
     headers: {
       apikey: config.anonKey,
       Authorization: `Bearer ${config.anonKey}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'resolution=merge-duplicates'
+      'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ id: lookupId, payload: encryptedPayload, updated_at: new Date().toISOString() })
+    body: JSON.stringify({ lookup_id: lookupId, new_payload: encryptedPayload })
   });
   if (!res.ok) throw new Error('Failed to push to cloud');
 }
 
 async function syncData(manual = false) {
-  if (!settings.syncKey) return;
+  if (!settings.syncKey || isSyncing) return;
+  isSyncing = true;
   const btnIcon = syncBtn;
   const originalText = btnIcon.textContent;
   btnIcon.textContent = '🔄 Syncing...';
@@ -992,6 +1031,7 @@ async function syncData(manual = false) {
         console.error('Decryption failed, maybe wrong key?', err);
         if (manual) showToast('Sync failed: Invalid key or corrupted data', 'error');
         btnIcon.textContent = originalText;
+        isSyncing = false;
         return;
       }
     }
@@ -1013,6 +1053,7 @@ async function syncData(manual = false) {
     if (manual) showToast('Sync failed: ' + err.message, 'error');
   }
   btnIcon.textContent = originalText;
+  isSyncing = false;
   if (syncModal.classList.contains('show')) renderSyncModal();
 }
 
@@ -1037,7 +1078,7 @@ function renderInstructionsPanel() {
         </div>
         
         <div class="sync-instruction-step">
-          <strong>2. Create the Database Table</strong>
+          <strong>2. Create the Database Table & Secure RPCs</strong>
           Go to your Supabase project dashboard, click on <strong>SQL Editor</strong>, open a <strong>New query</strong>, paste the following SQL, and click <strong>Run</strong>:
           <div class="sql-code-box">
             <button id="copySqlBtn" class="copy-sql-btn">📋 Copy</button>
@@ -1047,11 +1088,34 @@ function renderInstructionsPanel() {
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Enable RLS and revoke default public permissions
 ALTER TABLE public.sync_data ENABLE ROW LEVEL SECURITY;
+REVOKE SELECT, INSERT, UPDATE, DELETE ON public.sync_data FROM anon, authenticated;
 
-CREATE POLICY "Allow anon select" ON public.sync_data FOR SELECT USING (true);
-CREATE POLICY "Allow anon insert" ON public.sync_data FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow anon update" ON public.sync_data FOR UPDATE USING (true);</code></pre>
+-- Create RPC to secure query by exact ID lookup
+CREATE OR REPLACE FUNCTION get_sync_data(lookup_id TEXT)
+RETURNS TABLE (id TEXT, payload TEXT, updated_at TIMESTAMP WITH TIME ZONE)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY SELECT s.id, s.payload, s.updated_at FROM public.sync_data s WHERE s.id = lookup_id;
+END;
+$$;
+
+-- Create RPC to secure upsert
+CREATE OR REPLACE FUNCTION set_sync_data(lookup_id TEXT, new_payload TEXT)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  INSERT INTO public.sync_data (id, payload, updated_at)
+  VALUES (lookup_id, new_payload, now())
+  ON CONFLICT (id) DO UPDATE
+  SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at;
+END;
+$$;</code></pre>
           </div>
         </div>
         
@@ -1084,7 +1148,7 @@ function attachInstructionsListeners() {
   }
 }
 
-function renderSyncModal() {
+async function renderSyncModal() {
   const config = getSupabaseConfig();
   const configWarning = (!config.url || !config.anonKey) 
     ? `<div style="color: #ff5555; background: rgba(255,0,0,0.1); padding: 10px; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem;">
@@ -1098,7 +1162,6 @@ function renderSyncModal() {
       url: config.url || '',
       anon: config.anonKey || ''
     });
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=255-255-255&bgcolor=11-12-16&data=${encodeURIComponent(qrPayload)}`;
     
     syncModalBody.innerHTML = `
       <h2 class="sync-modal-title">Sync Active</h2>
@@ -1107,14 +1170,14 @@ function renderSyncModal() {
       
       <div class="sync-key-display">
         <span id="syncKeyText" style="filter: blur(4px); transition: filter 0.3s; cursor: pointer;" title="Click to reveal">
-          ${settings.syncKey}
+          ${escapeHTML(settings.syncKey)}
         </span>
         <button id="copySyncKeyBtn" class="sync-btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">📋 Copy</button>
       </div>
       <p style="font-size: 0.8rem; color: var(--text-muted);">Plain text key - keep this secret!</p>
       
       <div class="sync-qr-container">
-        <img src="${qrUrl}" alt="QR Code" width="150" height="150" title="Scan to link another device" />
+        <canvas id="qrCanvas" width="150" height="150" title="Scan to link another device"></canvas>
       </div>
       
       <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Last Synced: ${lastSyncStr}</p>
@@ -1127,6 +1190,22 @@ function renderSyncModal() {
       ${renderDevPanel()}
       ${renderInstructionsPanel()}
     `;
+    
+    try {
+      const { default: QRious } = await import('qrious');
+      const qrCanvas = document.getElementById('qrCanvas');
+      if (qrCanvas) {
+        new QRious({
+          element: qrCanvas,
+          value: qrPayload,
+          size: 150,
+          background: '#111216',
+          foreground: '#ffffff'
+        });
+      }
+    } catch (err) {
+      console.error('Failed to generate QR code locally:', err);
+    }
     
     document.getElementById('syncKeyText').addEventListener('click', (e) => {
       e.target.style.filter = e.target.style.filter === 'none' ? 'blur(4px)' : 'none';
