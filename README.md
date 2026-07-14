@@ -155,6 +155,31 @@ If you have a separate JSON file containing new novels or volume link updates, y
        node scripts/sync-novels.js path/to/your-file.json --merge
        ```
 
+### Option 2b: Import from animeStuff Catalogue
+If you want to import *new* novels from an animeStuff catalogue JSON (which has a different schema including a flat `genres` array and a source page `url`), you can use the dedicated animeStuff import tool. This will import them as metadata-only entries and save the source link under `sourceUrl`. Match and merge will skip existing novels automatically.
+
+1. **Compare/Dry-run**:
+   - To compare with `animestuff-data.json` at root:
+     ```bash
+     npm run sync:animestuff
+     ```
+   - To compare with a **custom path**:
+     ```bash
+     node scripts/sync-animestuff.js path/to/your-file.json
+     ```
+
+2. **Merge Changes**:
+   - To execute the merge (assigns new sequential IDs, creates a timestamped backup, and prepends the new novels to `public/data.json`):
+     - With root `animestuff-data.json`:
+       ```bash
+       npm run sync:animestuff:merge
+       ```
+     - With a **custom path**:
+       ```bash
+       node scripts/sync-animestuff.js path/to/your-file.json --merge
+       ```
+
+
 ### Option 3: Database Cleansing & Pruning Script
 To keep the database clean, standard, and free of redundant entries or placeholders:
 
