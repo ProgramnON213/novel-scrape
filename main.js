@@ -691,11 +691,11 @@ function sanitizeUrl(url) {
   if (trimmed.toLowerCase().startsWith('javascript:') || trimmed.toLowerCase().startsWith('data:')) {
     return '#';
   }
-  return trimmed;
+  return escapeHTML(trimmed);
 }
 
 function escapeAttr(str) {
-  return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  return escapeHTML(str);
 }
 
 /* ============================================================
