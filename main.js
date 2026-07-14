@@ -101,7 +101,7 @@ function loadSettings() {
 
 let syncTimeout = null;
 function scheduleSync() {
-  if (!settings.syncKey) return;
+  if (!settings.syncKey || isSyncing) return;
   if (syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = setTimeout(() => {
     if (typeof syncData === 'function') syncData();
@@ -637,7 +637,12 @@ function importBackup(file) {
         progress: parsed.progress || {},
         theme: parsed.theme       || 'theme-midnight',
         hideNoCover: parsed.hideNoCover !== undefined ? parsed.hideNoCover : false,
-        brokenCovers: parsed.brokenCovers || []
+        brokenCovers: parsed.brokenCovers || [],
+        // Preserve local sync configurations/state
+        syncKey: settings.syncKey,
+        syncLastTime: settings.syncLastTime,
+        customSupabaseUrl: settings.customSupabaseUrl,
+        customSupabaseAnonKey: settings.customSupabaseAnonKey
       };
       brokenCovers = new Set(settings.brokenCovers);
       saveSettings();
