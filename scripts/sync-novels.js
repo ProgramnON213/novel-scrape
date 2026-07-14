@@ -30,23 +30,6 @@ function normalizeString(str) {
 }
 
 /**
- * Heals multi-roundtrip mojibake encoding corruption in title strings.
- * Collapses long runs of Ã/Â/¢ sequences back into the apostrophe they represent,
- * then fixes any resulting spacing artifacts (e.g. "I' m" → "I'm").
- */
-function cleanTitle(title) {
-  if (!title || typeof title !== 'string') return title;
-  let cleaned = title;
-  // Replace 5+ contiguous mojibake chars with a single apostrophe
-  cleaned = cleaned.replace(/[ÃÂ¢â\u0080-\u00FF\u0100-\uFFFF]{5,}/g, "'");
-  // Collapse any resulting extra whitespace
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
-  // Fix "word' m" → "word'm" (common split of contractions like I'm, don't, can't)
-  cleaned = cleaned.replace(/(\w)'\s+m\b/g, "$1'm");
-  return cleaned;
-}
-
-/**
  * Validates the loaded JSON structure.
  * Returns true if valid, false otherwise.
  */
@@ -305,11 +288,6 @@ function normalizeNovelData(data) {
     if (typeof item !== 'object' || item === null) return item;
     
     const normalized = { ...item };
-
-    // Heal mojibake-corrupted titles before any further processing
-    if (typeof normalized.title === 'string') {
-      normalized.title = cleanTitle(normalized.title);
-    }
     
     // Convert 'genres' array to comma-separated 'genre' string
     if (Array.isArray(normalized.genres)) {

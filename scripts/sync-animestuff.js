@@ -132,22 +132,6 @@ function loadJSON(filePath) {
   }
 }
 
-/**
- * Heals extremely corrupted title encoding (multi-roundtrip mojibake).
- */
-function cleanTitle(title) {
-  if (!title) return '';
-  let cleaned = title;
-  // Collapse long sequences of repeating mojibake characters to a single apostrophe
-  cleaned = cleaned.replace(/[ÃÂ¢â\u0080-\u00FF\u0100-\uFFFF]{5,}/g, "'");
-  // Normalize extra/weird spaces
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
-  // Turn "I' m" or "I' m" into "I'm"
-  cleaned = cleaned.replace(/\bI'\s+m\b/gi, "I'm");
-  cleaned = cleaned.replace(/\bI'\s+Cheating\b/gi, "I'm Cheating");
-  return cleaned;
-}
-
 // ---------------------------------------------------------------------------
 // Normalize animeStuff entry → internal schema
 // ---------------------------------------------------------------------------
@@ -156,9 +140,6 @@ function normalizeEntry(item) {
 
   // Require at minimum a title
   if (!item.title || typeof item.title !== 'string' || item.title.trim() === '') return null;
-
-  const cleanedTitle = cleanTitle(item.title);
-  if (cleanedTitle === '') return null;
 
   // genres[] → genre string
   let genre = '';
@@ -169,7 +150,7 @@ function normalizeEntry(item) {
   }
 
   return {
-    title:        cleanedTitle,
+    title:        item.title.trim(),
     cover:        typeof item.cover  === 'string' ? item.cover.trim()  : '',
     genre,
     type:         typeof item.type   === 'string' ? item.type.trim()   : 'Light Novel',
