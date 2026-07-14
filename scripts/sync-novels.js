@@ -512,13 +512,6 @@ function run() {
           }
 
           if (newNovel[field] !== existingNovel[field]) {
-            // Special rule for cover image: if existing has a cover, don't overwrite it
-            if (field === 'cover') {
-              const currentCoverAvailable = existingNovel.cover && existingNovel.cover.trim() !== '';
-              if (currentCoverAvailable) {
-                return; // skip updating cover
-              }
-            }
             // ignore empty fields in new data replacing non-empty fields in existing
             if (newNovel[field] === '' && existingNovel[field] !== '') {
               return;
