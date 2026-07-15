@@ -96,6 +96,27 @@ function normalizeGenres(genreStr) {
   return Array.from(new Set(normalizedList)).sort().join(', ');
 }
 
+function cleanSynopsis(synopsis) {
+  if (!synopsis || typeof synopsis !== 'string') return synopsis;
+  let cleaned = synopsis;
+
+  cleaned = cleaned.replace(/<\/p>\s*<p[^>]*>/gi, '<br/><br/>');
+  cleaned = cleaned.replace(/<p[^>]*>/gi, '');
+  cleaned = cleaned.replace(/<\/p>/gi, '<br/><br/>');
+  cleaned = cleaned.replace(/<br\s*\/?>/gi, '<br/>');
+  cleaned = cleaned.replace(/(<br\/>\s*){3,}/gi, '<br/><br/>');
+
+  cleaned = cleaned.trim();
+  while (cleaned.startsWith('<br/>')) {
+    cleaned = cleaned.substring(5).trim();
+  }
+  while (cleaned.endsWith('<br/>')) {
+    cleaned = cleaned.substring(0, cleaned.length - 5).trim();
+  }
+
+  return cleaned;
+}
+
 function normalizeString(str) {
   return str ? str.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
 }
@@ -213,27 +234,43 @@ function run() {
 
   console.log(`✓ Tag normalization completed. Normalized genres for ${tagNormalizeCount} entries.`);
 
+  // Task 3.5: Clean synopsis HTML tags
+  console.log('\n--- cleaning synopsis HTML tags ---');
+  let synopsisCleanCount = 0;
+  const synopsisCleanedDb = tagNormalizedDb.map(entry => {
+    const newEntry = { ...entry };
+    const cleanedSynopsis = cleanSynopsis(entry.synopsis);
+    if (cleanedSynopsis !== entry.synopsis) {
+      console.log(`📝 Cleaned synopsis for "${newEntry.title}":\n   Old: "${entry.synopsis || ''}"\n   New: "${cleanedSynopsis}"`);
+      newEntry.synopsis = cleanedSynopsis;
+      synopsisCleanCount++;
+    }
+    return newEntry;
+  });
+
+  console.log(`✓ Synopsis cleaning completed. Cleaned synopses for ${synopsisCleanCount} entries.`);
+
   // Task 4: Deduplicate entries (crossover loose matching)
   console.log('\n--- detecting duplicate entries ---');
   const visited = new Set();
   const groups = [];
 
-  for (let i = 0; i < tagNormalizedDb.length; i++) {
+  for (let i = 0; i < synopsisCleanedDb.length; i++) {
     if (visited.has(i)) continue;
-    const group = [tagNormalizedDb[i]];
+    const group = [synopsisCleanedDb[i]];
     visited.add(i);
 
-    for (let j = i + 1; j < tagNormalizedDb.length; j++) {
+    for (let j = i + 1; j < synopsisCleanedDb.length; j++) {
       if (visited.has(j)) continue;
       let matches = false;
       for (const item of group) {
-        if (isDuplicate(item, tagNormalizedDb[j])) {
+        if (isDuplicate(item, synopsisCleanedDb[j])) {
           matches = true;
           break;
         }
       }
       if (matches) {
-        group.push(tagNormalizedDb[j]);
+        group.push(synopsisCleanedDb[j]);
         visited.add(j);
       }
     }
@@ -249,7 +286,6 @@ function run() {
       dedupedDb.push(group[0]);
     } else {
       duplicateGroupCount++;
-      // Sort group by link completeness descending
       group.sort((a, b) => countLinks(b) - countLinks(a));
       
       const kept = group[0];
@@ -292,6 +328,7 @@ function run() {
   console.log(`Cleaned titles:       ${titleCleanCount}`);
   console.log(`Cleaned alt titles:   ${altCleanCount}`);
   console.log(`Normalized tags:      ${tagNormalizeCount}`);
+  console.log(`Cleaned synopses:     ${synopsisCleanCount}`);
   console.log(`Discarded duplicates: ${discardedCount}`);
   console.log(`Pruned empty:         ${prunedCount}`);
   console.log(`Final database size:  ${finalDb.length}`);
