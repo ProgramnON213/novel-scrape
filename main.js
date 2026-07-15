@@ -7,6 +7,8 @@ const LS_SETTINGS_KEY = 'novel_settings';
 const SETTINGS_VERSION = 1;
 const READING_STATUS_OPTIONS = ['', 'Reading', 'Plan to Read', 'Completed', 'Dropped'];
 const THEMES = ['theme-midnight', 'theme-sakura', 'theme-cyberpunk'];
+const DEFAULT_LIB_ENTRY = Object.freeze({ favorite: false, status: '' });
+const EMPTY_ARRAY = Object.freeze([]);
 
 /* ============================================================
    STATE
@@ -14,6 +16,8 @@ const THEMES = ['theme-midnight', 'theme-sakura', 'theme-cyberpunk'];
 let novelsData = [];
 // tagStates: { [tagName]: 'neutral' | 'include' | 'exclude' }
 const tagStates = {};
+let cachedIncludedTags = [];
+let cachedExcludedTags = [];
 let activeLibFilter = 'all'; // 'all' | 'favorite' | 'Reading' | 'Plan to Read' | 'Completed' | 'Dropped'
 
 /**
@@ -145,11 +149,17 @@ async function init() {
     const response = await fetch(`${import.meta.env.BASE_URL}data.json?t=${new Date().getTime()}`);
     novelsData = await response.json();
 
-    // Pre-lowercase fields for high-performance search filtering
+    // Pre-lowercase and pre-split fields for high-performance search filtering
     novelsData.forEach(novel => {
-      novel._lowercaseTitle = novel.title.toLowerCase();
+      novel._lowercaseTitle = novel.title ? novel.title.toLowerCase() : '';
       novel._lowercaseAlternative = novel.alternative ? novel.alternative.toLowerCase() : '';
       novel._lowercaseGenre = novel.genre ? novel.genre.toLowerCase() : '';
+      novel._genreList = novel.genre
+        ? novel.genre.split(',').map(g => g.trim().toLowerCase())
+        : EMPTY_ARRAY;
+      novel._rawGenreList = novel.genre
+        ? novel.genre.split(',').map(g => g.trim())
+        : EMPTY_ARRAY;
       novel._lowercaseAuthors = novel.authors ? novel.authors.toLowerCase() : '';
       novel._lowercaseArtist = novel.artist ? novel.artist.toLowerCase() : '';
       novel._lowercaseSynopsis = novel.synopsis ? novel.synopsis.toLowerCase() : '';
@@ -160,19 +170,26 @@ async function init() {
     applyFilters();
   } catch (error) {
     console.error('Error fetching data:', error);
-    grid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: var(--accent-orange);">Error loading novels data.</p>';
+    grid.innerHTML = '<p class="grid-message-error">Error loading novels data.</p>';
   }
 }
 
 /* ============================================================
    TAG SYSTEM
    ============================================================ */
+function updateCachedTags() {
+  cachedIncludedTags = Object.entries(tagStates)
+    .filter(([, s]) => s === 'include')
+    .map(([t]) => t.toLowerCase());
+  cachedExcludedTags = Object.entries(tagStates)
+    .filter(([, s]) => s === 'exclude')
+    .map(([t]) => t.toLowerCase());
+}
+
 function buildTagSystem() {
   const allGenres = new Set();
   novelsData.forEach(novel => {
-    if (novel.genre) {
-      novel.genre.split(',').forEach(g => allGenres.add(g.trim()));
-    }
+    novel._rawGenreList.forEach(g => allGenres.add(g));
   });
 
   const sortedGenres = [...allGenres].sort();
@@ -190,6 +207,7 @@ function buildTagSystem() {
     fragment.appendChild(pill);
   });
   tagContainer.appendChild(fragment);
+  updateCachedTags();
 }
 
 function cycleTagState(tag, pill) {
@@ -197,12 +215,13 @@ function cycleTagState(tag, pill) {
   const next = current === 'neutral' ? 'include' : current === 'include' ? 'exclude' : 'neutral';
   tagStates[tag] = next;
   pill.dataset.state = next;
+  updateCachedTags();
   updateTagUI();
   applyFilters();
 }
 
 function updateTagUI() {
-  const active = Object.values(tagStates).filter(s => s !== 'neutral').length;
+  const active = cachedIncludedTags.length + cachedExcludedTags.length;
   if (active > 0) {
     activeTagCount.textContent = active;
     activeTagCount.classList.remove('hidden');
@@ -216,6 +235,7 @@ function updateTagUI() {
 function clearAllTags() {
   Object.keys(tagStates).forEach(tag => { tagStates[tag] = 'neutral'; });
   document.querySelectorAll('.tag-pill').forEach(pill => { pill.dataset.state = 'neutral'; });
+  updateCachedTags();
   updateTagUI();
   applyFilters();
 }
@@ -227,6 +247,7 @@ function resetAllFilters() {
   // Clear tag states & UI
   Object.keys(tagStates).forEach(tag => { tagStates[tag] = 'neutral'; });
   document.querySelectorAll('.tag-pill').forEach(pill => { pill.dataset.state = 'neutral'; });
+  updateCachedTags();
   updateTagUI();
 
   // Reset library filter to 'all'
@@ -249,7 +270,7 @@ function resetAllFilters() {
    LIBRARY HELPERS
    ============================================================ */
 function getLibEntry(novelId) {
-  return settings.library[novelId] || { favorite: false, status: '' };
+  return settings.library[novelId] || DEFAULT_LIB_ENTRY;
 }
 
 function setLibEntry(novelId, patch) {
