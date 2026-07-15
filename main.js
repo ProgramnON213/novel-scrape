@@ -549,8 +549,8 @@ function openModal(novel) {
   // --- AnimeStuff source link (shown if novel has a sourceUrl) ---
   const sourceUrlHtml = novel.sourceUrl
     ? `<a href="${sanitizeUrl(novel.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="source-link animestuff-link">
-        🔗 Read on AnimeStuff
-      </a>`
+         🔗 Read on AnimeStuff
+       </a>`
     : '';
 
   // --- Copy buttons ---
@@ -558,8 +558,8 @@ function openModal(novel) {
   if (novel.volumes && novel.volumes.length > 0) {
     copyButtonsHtml = `
       <div class="copy-actions">
-        ${epubs.length > 0 ? `<button class="copy-btn purple-btn" id="copyEpubsBtn">Copy All EPUB Links</button>` : ''}
-        ${pdfs.length > 0 ? `<button class="copy-btn orange-btn" id="copyPdfsBtn">Copy All PDF Links</button>` : ''}
+        ${epubs.length > 0 ? `<button class="copy-btn purple-btn" id="copyEpubsBtn" data-novel-id="${novel.id}">Copy All EPUB Links</button>` : ''}
+        ${pdfs.length > 0 ? `<button class="copy-btn orange-btn" id="copyPdfsBtn" data-novel-id="${novel.id}">Copy All PDF Links</button>` : ''}
       </div>
     `;
   }
@@ -580,11 +580,11 @@ function openModal(novel) {
         <div class="user-library-controls">
           <span class="section-label">My Library</span>
           <div class="favorite-row">
-            <button class="fav-toggle-btn${entry.favorite ? ' active' : ''}" id="favToggleBtn">
+            <button class="fav-toggle-btn${entry.favorite ? ' active' : ''}" id="favToggleBtn" data-novel-id="${novel.id}">
               ${entry.favorite ? '❤️ Favorited' : '🤍 Add to Favorites'}
             </button>
           </div>
-          <select class="status-select" id="readingStatusSelect">
+          <select class="status-select" id="readingStatusSelect" data-novel-id="${novel.id}">
             ${statusOptions}
           </select>
         </div>
@@ -616,7 +616,7 @@ function openModal(novel) {
           </div>
           <div class="detail-item">
             <span class="label">Status</span>
-            <span class="status-badge" style="align-self: flex-start; margin-top: 0.2rem;">${escapeHTML(novel.status) || 'Unknown'}</span>
+            <span class="status-badge modal-status-badge">${escapeHTML(novel.status) || 'Unknown'}</span>
           </div>
         </div>
       </div>
@@ -631,63 +631,6 @@ function openModal(novel) {
       </div>
     </div>
   `;
-
-  // Bind dynamic error listener for modal image fallback
-  const modalCoverImg = modalBody.querySelector('.modal-cover');
-  if (modalCoverImg) {
-    modalCoverImg.addEventListener('error', () => {
-      modalCoverImg.src = 'https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover';
-    });
-  }
-
-  // --- Favorite toggle ---
-  document.getElementById('favToggleBtn').addEventListener('click', () => {
-    const newFav = !getLibEntry(novel.id).favorite;
-    setLibEntry(novel.id, { favorite: newFav });
-    const btn = document.getElementById('favToggleBtn');
-    btn.classList.toggle('active', newFav);
-    btn.textContent = newFav ? '❤️ Favorited' : '🤍 Add to Favorites';
-    applyFilters(); // re-render grid to update icons
-  });
-
-  // --- Reading status change ---
-  document.getElementById('readingStatusSelect').addEventListener('change', (e) => {
-    setLibEntry(novel.id, { status: e.target.value });
-    applyFilters(); // re-render to update sorting / badges
-  });
-
-  // --- Volume checkboxes ---
-  modalBody.querySelectorAll('.vol-checkbox').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const novelId = cb.dataset.novelId;
-      const volTitle = cb.dataset.volTitle;
-      let current = getProgress(novelId);
-      if (cb.checked) {
-        if (!current.includes(volTitle)) current = [...current, volTitle];
-      } else {
-        current = current.filter(t => t !== volTitle);
-      }
-      setProgress(novelId, current);
-
-      // Update row styling and progress badge without closing modal
-      const row = cb.closest('.volume-item');
-      row.classList.toggle('vol-read', cb.checked);
-      updateVolProgressBadge(novel);
-      applyFilters(); // refresh grid cards
-    });
-  });
-
-  // --- Copy buttons ---
-  if (epubs.length > 0) {
-    document.getElementById('copyEpubsBtn').addEventListener('click', () => {
-      copyToClipboard(epubs.join('\n'), 'copyEpubsBtn', 'Copy All EPUB Links');
-    });
-  }
-  if (pdfs.length > 0) {
-    document.getElementById('copyPdfsBtn').addEventListener('click', () => {
-      copyToClipboard(pdfs.join('\n'), 'copyPdfsBtn', 'Copy All PDF Links');
-    });
-  }
 
   modal.classList.add('show');
 }
@@ -1517,6 +1460,83 @@ grid.addEventListener('error', (e) => {
       }
     }
     img.src = 'https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover';
+  }
+}, true); // Use capture phase because error events do not bubble
+
+// Modal Event Delegation (Clicks, Changes, Cover Image Errors)
+modalBody.addEventListener('click', (e) => {
+  const target = e.target;
+
+  // Favorite toggle
+  if (target.id === 'favToggleBtn') {
+    const novelId = target.dataset.novelId;
+    const novel = novelsData.find(n => n.id === novelId);
+    if (novel) {
+      const newFav = !getLibEntry(novel.id).favorite;
+      setLibEntry(novel.id, { favorite: newFav });
+      target.classList.toggle('active', newFav);
+      target.textContent = newFav ? '❤️ Favorited' : '🤍 Add to Favorites';
+      applyFilters();
+    }
+  }
+
+  // Copy EPUB links
+  if (target.id === 'copyEpubsBtn') {
+    const novelId = target.dataset.novelId;
+    const novel = novelsData.find(n => n.id === novelId);
+    if (novel && novel.volumes) {
+      const epubs = novel.volumes.filter(v => v.link1).map(v => v.link1);
+      copyToClipboard(epubs.join('\n'), 'copyEpubsBtn', 'Copy All EPUB Links');
+    }
+  }
+
+  // Copy PDF links
+  if (target.id === 'copyPdfsBtn') {
+    const novelId = target.dataset.novelId;
+    const novel = novelsData.find(n => n.id === novelId);
+    if (novel && novel.volumes) {
+      const pdfs = novel.volumes.filter(v => v.link2).map(v => v.link2);
+      copyToClipboard(pdfs.join('\n'), 'copyPdfsBtn', 'Copy All PDF Links');
+    }
+  }
+});
+
+modalBody.addEventListener('change', (e) => {
+  const target = e.target;
+
+  // Reading status select
+  if (target.id === 'readingStatusSelect') {
+    const novelId = target.dataset.novelId;
+    setLibEntry(novelId, { status: target.value });
+    applyFilters();
+  }
+
+  // Volume checkbox change
+  if (target.classList.contains('vol-checkbox')) {
+    const novelId = target.dataset.novelId;
+    const volTitle = target.dataset.volTitle;
+    let current = getProgress(novelId);
+    if (target.checked) {
+      if (!current.includes(volTitle)) current = [...current, volTitle];
+    } else {
+      current = current.filter(t => t !== volTitle);
+    }
+    setProgress(novelId, current);
+
+    // Update row styling and progress badge
+    const row = target.closest('.volume-item');
+    if (row) row.classList.toggle('vol-read', target.checked);
+    
+    const novel = novelsData.find(n => n.id === novelId);
+    if (novel) updateVolProgressBadge(novel);
+    
+    applyFilters();
+  }
+});
+
+modalBody.addEventListener('error', (e) => {
+  if (e.target.classList.contains('modal-cover')) {
+    e.target.src = 'https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover';
   }
 }, true); // Use capture phase because error events do not bubble
 
