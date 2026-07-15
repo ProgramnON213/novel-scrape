@@ -333,7 +333,14 @@ All design tokens live in the `:root` block of `style.css`:
 - **`main.js` is a single module** — no bundler-split chunks or imports. All core logic lives here: `init()`, `buildTagSystem()`, `cycleTagState()`, `applyFilters()`, `renderGrid()`, `openModal()`, `exportBackup()`, `importBackup()`. `qrious` is dynamically imported only when the sync modal is opened.
 - **Data flow:** `fetch(data.json)` → `novelsData[]` → `buildTagSystem()` populates `tagStates{}` → `applyFilters()` recomputes the filtered list → `renderGrid()` re-renders the DOM.
 - **Tag state machine:** each genre cycles `neutral → include → exclude → neutral` on click. Filtering requires ALL included genres and NO excluded genres.
-- **Modal is a singleton** — `openModal(novel)` rebuilds `modalBody.innerHTML` each time and re-attaches copy-button listeners. All dynamic content is HTML-escaped via `escapeHTML()` / `escapeSynopsis()` before binding to prevent DOM XSS.
+- **Event delegation & singletons:** both the grid cards and the modal are singletons. All interactions (clicks, checkbox progress updates, and dynamic image error/load checks) are handled via high-performance event delegation listeners attached once to the static `#novelGrid` and `#modalBody` elements to prevent listener leaks and reduce DOM mutation overhead.
+- **Performance optimizations:**
+  - Active tag states are cached (`cachedIncludedTags`, `cachedExcludedTags`) upon tag toggle rather than calculated inside the loop during search queries.
+  - Genres are pre-split and lowercased upon startup (`_genreList` and `_rawGenreList`).
+  - Search sorting implements list partitioning (reading vs other novels) in a single traversal.
+  - Constant variables (`DEFAULT_LIB_ENTRY`, `EMPTY_ARRAY`) are frozen to avoid runtime object allocations in hot paths.
+  - Camera QR scanner downscales input frames (max 600px) before processing via `jsQR` to eliminate scanning lag.
+- **Security & Sanitization:** All dynamic content is HTML-escaped (`escapeHTML()` / `escapeSynopsis()`). Link URLs are robustly sanitized by stripping non-printable control characters and blocking harmful protocols (`javascript:`, `data:`, and `vbscript:`).
 - **No state management library** — mutable module-level variables (`novelsData`, `tagStates`, `activeLibFilter`) serve as the store.
 - **`import.meta.env.BASE_URL`** is used when fetching `data.json`, so it works correctly under any Vite `base` path.
 - **Personalization state** lives in a single `settings` object (`LS_SETTINGS_KEY = 'novel_settings'`) and is persisted to `localStorage`. All user data is keyed by `novel.id` (string) so it remains valid regardless of changes to `data.json`.
