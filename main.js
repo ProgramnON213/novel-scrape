@@ -109,7 +109,7 @@ function scheduleSync() {
   if (!settings.syncKey || isSyncing) return;
   if (syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = setTimeout(() => {
-    if (typeof syncData === 'function') syncData();
+    syncData();
   }, 2000);
 }
 
@@ -734,7 +734,10 @@ function escapeSynopsis(str) {
 function sanitizeUrl(url) {
   if (!url) return '';
   const trimmed = url.trim();
-  if (trimmed.toLowerCase().startsWith('javascript:') || trimmed.toLowerCase().startsWith('data:')) {
+  // Strip control characters and check protocol
+  const sanitized = trimmed.replace(/[^\x20-\x7E]/g, '');
+  const lower = sanitized.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
     return '#';
   }
   return escapeHTML(trimmed);
@@ -919,12 +922,24 @@ function scanTick() {
   if (!isScanning) return;
   const video = document.getElementById('scannerVideo');
   if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+    const maxDimension = 600;
+    if (width > maxDimension || height > maxDimension) {
+      if (width > height) {
+        height = Math.round((height * maxDimension) / width);
+        width = maxDimension;
+      } else {
+        width = Math.round((width * maxDimension) / height);
+        height = maxDimension;
+      }
+    }
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, width, height);
+    const imgData = ctx.getImageData(0, 0, width, height);
     const code = jsQR(imgData.data, imgData.width, imgData.height);
     if (code) {
       showToast('QR Code detected!', 'success');
@@ -1228,7 +1243,7 @@ function attachInstructionsListeners() {
 async function renderSyncModal() {
   const config = getSupabaseConfig();
   const configWarning = (!config.url || !config.anonKey) 
-    ? `<div style="color: #ff5555; background: rgba(255,0,0,0.1); padding: 10px; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem;">
+    ? `<div class="sync-config-warning">
         ⚠️ Supabase not configured! Please open Developer Credentials below and set them up.
        </div>` : '';
 
@@ -1246,18 +1261,18 @@ async function renderSyncModal() {
       <p class="sync-modal-desc">Your progress is being synced securely across devices.</p>
       
       <div class="sync-key-display">
-        <span id="syncKeyText" style="filter: blur(4px); transition: filter 0.3s; cursor: pointer;" title="Click to reveal">
+        <span id="syncKeyText" class="sync-key-val" title="Click to reveal">
           ${escapeHTML(settings.syncKey)}
         </span>
-        <button id="copySyncKeyBtn" class="sync-btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">📋 Copy</button>
+        <button id="copySyncKeyBtn" class="sync-btn-secondary sync-btn-small">📋 Copy</button>
       </div>
-      <p style="font-size: 0.8rem; color: var(--text-muted);">Plain text key - keep this secret!</p>
+      <p class="sync-note">Plain text key - keep this secret!</p>
       
       <div class="sync-qr-container">
         <canvas id="qrCanvas" width="150" height="150" title="Scan to link another device"></canvas>
       </div>
       
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Last Synced: ${lastSyncStr}</p>
+      <p class="sync-note" style="margin-bottom: 1rem;">Last Synced: ${lastSyncStr}</p>
       
       <div class="sync-actions">
         <button id="forceSyncBtn" class="sync-btn-primary">🔄 Sync Now</button>
@@ -1285,7 +1300,7 @@ async function renderSyncModal() {
     }
     
     document.getElementById('syncKeyText').addEventListener('click', (e) => {
-      e.target.style.filter = e.target.style.filter === 'none' ? 'blur(4px)' : 'none';
+      e.target.classList.toggle('revealed');
     });
     document.getElementById('copySyncKeyBtn').addEventListener('click', () => {
       navigator.clipboard.writeText(settings.syncKey);
@@ -1312,7 +1327,7 @@ async function renderSyncModal() {
         <button id="cameraScanBtn" class="sync-btn-secondary">📷 Scan QR Code</button>
         <button id="uploadQRBtn" class="sync-btn-secondary">📁 Upload QR Image</button>
       </div>
-
+ 
       <div id="scannerContainer" class="scanner-video-container">
         <video id="scannerVideo" class="scanner-video"></video>
         <div class="scanner-overlay">
@@ -1322,7 +1337,7 @@ async function renderSyncModal() {
       
       <div class="sync-actions">
         <button id="generateSyncBtn" class="sync-btn-primary">✨ Generate New Sync Key</button>
-        <div style="margin: 1rem 0; color: var(--text-muted);">— OR —</div>
+        <div class="sync-separator">— OR —</div>
         <div class="sync-input-group row">
           <input type="text" id="existingSyncKey" class="sync-input" placeholder="Paste existing Sync Key..." />
           <button id="connectSyncBtn" class="sync-btn-secondary">Connect</button>
@@ -1343,7 +1358,7 @@ async function renderSyncModal() {
       }
     });
     document.getElementById('uploadQRBtn').addEventListener('click', triggerQRFileUpload);
-
+ 
     document.getElementById('generateSyncBtn').addEventListener('click', () => {
       settings.syncKey = generateRandomKey();
       saveSettings();
