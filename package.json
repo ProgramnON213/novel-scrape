@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "cli": "node scripts/cli.js",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
