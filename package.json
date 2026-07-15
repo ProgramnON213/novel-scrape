@@ -11,6 +11,10 @@
     "sync:merge": "node scripts/sync-novels.js --merge",
     "sync:animestuff": "node scripts/sync-animestuff.js",
     "sync:animestuff:merge": "node scripts/sync-animestuff.js --merge",
+    "sync:animestuff:fetch": "node scripts/sync-animestuff-fetch.js",
+    "sync:animestuff:fetch:merge": "node scripts/sync-animestuff-fetch.js --merge",
+    "sync:esnovels": "node scripts/sync-esnovels.js",
+    "sync:esnovels:merge": "node scripts/sync-esnovels.js --merge",
     "clean": "node scripts/clean-data.js",
     "clean:write": "node scripts/clean-data.js --write"
   },

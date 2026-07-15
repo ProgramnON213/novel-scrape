@@ -110,6 +110,34 @@ function getNextId(db) {
 }
 
 // ---------------------------------------------------------------------------
+// Network helpers
+// ---------------------------------------------------------------------------
+/**
+ * Checks if a URL actually loads successfully (HTTP status 200 OK).
+ */
+async function checkUrlExists(url) {
+  if (!url || typeof url !== 'string' || !url.startsWith('http')) {
+    return false;
+  }
+  try {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 5000); // 5s timeout
+    const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
+    clearTimeout(id);
+    if (response.ok) return true;
+    
+    // Fall back to GET if HEAD method is not allowed
+    const getController = new AbortController();
+    const getId = setTimeout(() => getController.abort(), 5000);
+    const getResponse = await fetch(url, { method: 'GET', signal: getController.signal });
+    clearTimeout(getId);
+    return getResponse.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // String helpers
 // ---------------------------------------------------------------------------
 function normalizeString(str) {
@@ -165,7 +193,7 @@ function normalizeEntry(item) {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
-function run() {
+async function run() {
   console.log('\x1b[35m==================================================');
   console.log('   📥  AnimeStuff → Novel DB Import Tool');
   console.log('==================================================\x1b[0m\n');
@@ -212,6 +240,15 @@ function run() {
     if (isExact || isNormalized) {
       skipped++;
     } else {
+      // Check if new cover actually loads before keeping it
+      if (entry.cover && entry.cover.startsWith('http')) {
+        console.log(`Checking if cover image for new novel "${entry.title}" loads: ${entry.cover}`);
+        const exists = await checkUrlExists(entry.cover);
+        if (!exists) {
+          console.log(`\x1b[33m⚠️  [Cover Check Failed] "${entry.title}" cover did not load. Setting cover to empty.\x1b[0m`);
+          entry.cover = '';
+        }
+      }
       newNovels.push(entry);
     }
   }

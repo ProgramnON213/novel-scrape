@@ -179,6 +179,32 @@ If you want to import *new* novels from an animeStuff catalogue JSON (which has 
        node scripts/sync-animestuff.js path/to/your-file.json --merge
        ```
 
+### Option 2c: Automated Sync from EsNovels1
+If you want to pull the latest database directly from the remote EsNovels1 site and merge it:
+
+1. **Compare/Dry-run**:
+   ```bash
+   npm run sync:esnovels
+   ```
+
+2. **Merge Changes**:
+   ```bash
+   npm run sync:esnovels:merge
+   ```
+
+### Option 2d: Automated Remote Fetch & Sync from animeStuff
+If you want to pull the latest catalogue directly from the remote animeStuff repository and run the sync comparison/merge:
+
+1. **Compare/Dry-run**:
+   ```bash
+   npm run sync:animestuff:fetch
+   ```
+
+2. **Merge Changes**:
+   ```bash
+   npm run sync:animestuff:fetch:merge
+   ```
+
 
 ### Option 3: Database Cleansing & Pruning Script
 To keep the database clean, standard, and free of redundant entries or placeholders:

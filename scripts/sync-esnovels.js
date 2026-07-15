@@ -7,20 +7,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // File paths
 const MAIN_DB_PATH = path.resolve(__dirname, '../public/data.json');
 const BACKUP_DIR = path.resolve(__dirname, '../backup');
+const REMOTE_DATA_URL = 'https://esnovels.github.io/EsNovels1/data.json';
 
 // Help message check
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log('Usage: node scripts/sync-novels.js [path-to-json] [--merge]');
+  console.log('Usage: node scripts/sync-esnovels.js [--merge]');
   console.log('Options:');
   console.log('  --merge      Merge the detected updates into public/data.json (creates a backup first)');
   console.log('  --help, -h   Show this help message');
   process.exit(0);
 }
-
-// Parse custom path from CLI arguments
-const args = process.argv.slice(2).filter(arg => arg !== '--merge');
-const customPath = args.length > 0 ? args[0] : null;
-const NEW_DB_PATH = customPath ? path.resolve(customPath) : path.resolve(__dirname, '../new-data.json');
 
 /**
  * Normalizes a string for robust matching.
@@ -33,9 +29,9 @@ function normalizeString(str) {
  * Validates the loaded JSON structure.
  * Returns true if valid, false otherwise.
  */
-function validateJSONSchema(data, filePath) {
+function validateJSONSchema(data, sourceName) {
   if (!Array.isArray(data)) {
-    console.error(`\x1b[31mError in "${filePath}": Root element must be a JSON array.\x1b[0m`);
+    console.error(`\x1b[31mError in "${sourceName}": Root element must be a JSON array.\x1b[0m`);
     return false;
   }
 
@@ -80,9 +76,9 @@ function validateJSONSchema(data, filePath) {
 }
 
 /**
- * Loads and parses a JSON file.
+ * Loads and parses the local JSON file.
  */
-function loadJSON(filePath) {
+function loadLocalJSON(filePath) {
   if (!fs.existsSync(filePath)) {
     console.error(`\x1b[31mError: File not found at "${filePath}"\x1b[0m`);
     return null;
@@ -92,6 +88,24 @@ function loadJSON(filePath) {
     return JSON.parse(content);
   } catch (error) {
     console.error(`\x1b[31mError parsing JSON from "${filePath}":\x1b[0m`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Fetches and parses the remote JSON database.
+ */
+async function fetchRemoteJSON(url) {
+  try {
+    console.log(`Fetching remote database from: \x1b[36m${url}\x1b[0m ...`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`\x1b[31mFailed to fetch: ${response.status} ${response.statusText}\x1b[0m`);
+      return null;
+    }
+    return await response.json();
+  } catch (error) {
+    console.error(`\x1b[31mError fetching remote JSON:\x1b[0m`, error.message);
     return null;
   }
 }
@@ -196,8 +210,7 @@ for (const tag of VALID_TAGS) {
 }
 
 /**
- * Standardizes genre names to match the database conventions (e.g. Scifi -> Sci-fi, casing, etc.) and sorts them.
- * Supports comma and dot delimiters.
+ * Standardizes genre names to match the database conventions and sorts them.
  */
 function normalizeGenres(genreStr) {
   if (!genreStr || typeof genreStr !== 'string') return '';
@@ -208,17 +221,14 @@ function normalizeGenres(genreStr) {
       const trimmed = g.trim();
       const lower = trimmed.toLowerCase();
       
-      // Check in mappings
       if (GENRE_MAPPINGS[lower]) {
         return GENRE_MAPPINGS[lower];
       }
 
-      // Check in valid tags map
       if (VALID_TAGS_MAP[lower]) {
         return VALID_TAGS_MAP[lower];
       }
       
-      // Fallback: title case the genre words (e.g. "slice of life" -> "Slice of Life")
       return trimmed
         .replace(/([^\s:\-]+)/g, (match) => {
           return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
@@ -226,13 +236,11 @@ function normalizeGenres(genreStr) {
     })
     .filter(Boolean);
     
-  // Sort alphabetically to maintain consistency across the entire DB
   return Array.from(new Set(normalizedList)).sort().join(', ');
 }
 
 /**
  * Checks if all tags/genres in the genre string are valid.
- * A tag is valid if it is in the VALID_TAGS set or has a known mapping.
  * Returns { isValid: boolean, invalidTags: string[] }
  */
 function checkTagsValidity(genreStr) {
@@ -312,6 +320,9 @@ function diffSnippet(oldStr, newStr) {
   const contextOldEnd = Math.min(oldStr.length, oldEnd + 1 + contextLen);
   const suffixOld = oldStr.slice(oldEnd + 1, contextOldEnd) + (contextOldEnd < oldStr.length ? '...' : '');
 
+  const contextNewEnd = Math.min(newStr.length, newEnd + 1 + contextLen);
+  const suffixNew = newStr.slice(newEnd + 1, contextNewEnd) + (contextNewEnd < newStr.length ? '...' : '');
+
   const oldChange = oldStr.slice(start, oldEnd + 1);
   const newChange = newStr.slice(start, newEnd + 1);
 
@@ -341,7 +352,7 @@ function mergeAndSortGenres(existingGenreStr, newGenreStr) {
 }
 
 /**
- * Normalizes novel data from external sources (like animeStuff) to conform to the standard schema.
+ * Normalizes novel data from external sources to conform to the standard schema.
  */
 function normalizeNovelData(data) {
   if (!Array.isArray(data)) return data;
@@ -383,11 +394,11 @@ async function run() {
   const isMerge = process.argv.includes('--merge');
 
   console.log('\x1b[35m==================================================');
-  console.log('       📚 Novel Database Sync & Comparison');
+  console.log('    📚 EsNovels1 Database Sync & Comparison');
   console.log('==================================================\x1b[0m\n');
 
   // Load current database
-  const mainDb = loadJSON(MAIN_DB_PATH);
+  const mainDb = loadLocalJSON(MAIN_DB_PATH);
   if (!mainDb) {
     console.error('\x1b[31mCannot proceed without the main database (public/data.json).\x1b[0m');
     process.exit(1);
@@ -402,33 +413,23 @@ async function run() {
 
   console.log(`Loaded \x1b[36m${mainDb.length}\x1b[0m novels from the main database.`);
 
-  // Load new database
-  if (!fs.existsSync(NEW_DB_PATH)) {
-    console.error(`\x1b[31mError: File not found at "${NEW_DB_PATH}"\x1b[0m`);
-    if (customPath) {
-      console.log(`Please ensure the path you provided is correct: \x1b[36m${customPath}\x1b[0m`);
-    } else {
-      console.log(`Please place your new/partial JSON file at the root named \x1b[36mnew-data.json\x1b[0m and run the script again.`);
-      console.log(`\nAlternatively, specify a custom path: \x1b[90mnode scripts/sync-novels.js <path-to-json>\x1b[0m`);
-    }
+  // Fetch remote database
+  let remoteDb = await fetchRemoteJSON(REMOTE_DATA_URL);
+  if (!remoteDb) {
+    console.error('\x1b[31mFailed to load remote database. Exiting.\x1b[0m');
     process.exit(1);
   }
 
-  let newDb = loadJSON(NEW_DB_PATH);
-  if (!newDb) {
-    process.exit(1);
-  }
-
-  // Normalize incoming novel data structure (e.g. animeStuff format compatibility)
-  newDb = normalizeNovelData(newDb);
+  // Normalize incoming novel data structure
+  remoteDb = normalizeNovelData(remoteDb);
 
   // Validate database schema
-  if (!validateJSONSchema(newDb, NEW_DB_PATH)) {
-    console.error('\x1b[31mValidation failed: The input JSON file contains schema errors.\x1b[0m');
+  if (!validateJSONSchema(remoteDb, REMOTE_DATA_URL)) {
+    console.error('\x1b[31mValidation failed: The remote JSON file contains schema errors.\x1b[0m');
     process.exit(1);
   }
 
-  console.log(`Loaded \x1b[36m${newDb.length}\x1b[0m novels from the new/partial file.\n`);
+  console.log(`Loaded \x1b[36m${remoteDb.length}\x1b[0m novels from EsNovels1.\n`);
 
   // Build lookup index for main DB
   const idMap = new Map();
@@ -445,10 +446,9 @@ async function run() {
 
   const newNovels = [];
   const updatedNovels = [];
-  const noChangeNovels = [];
 
-  // Compare each novel in the new database
-  for (const newNovel of newDb) {
+  // Compare each novel in the remote database
+  for (const newNovel of remoteDb) {
     let mainIndex = -1;
 
     // 1. Try matching by ID
@@ -624,8 +624,6 @@ async function run() {
           mergedVols,
           newNovelData: newNovel
         });
-      } else {
-        noChangeNovels.push(existingNovel);
       }
     }
   }
@@ -635,7 +633,7 @@ async function run() {
   console.log(`📋 COMPARISON REPORT:`);
   console.log(`  • New Titles Found: \x1b[32m${newNovels.length}\x1b[0m`);
   console.log(`  • Titles with Updates (Volumes/Fields): \x1b[33m${updatedNovels.length}\x1b[0m`);
-  console.log(`  • Unchanged Matching Titles: \x1b[37m${newDb.length - newNovels.length - updatedNovels.length}\x1b[0m`);
+  console.log(`  • Unchanged Matching Titles: \x1b[37m${remoteDb.length - newNovels.length - updatedNovels.length}\x1b[0m`);
   console.log('--------------------------------------------------\n');
 
   if (newNovels.length > 0) {
@@ -654,11 +652,11 @@ async function run() {
     updatedNovels.forEach((u, idx) => {
       console.log(`  ${idx + 1}. \x1b[1m${u.title}\x1b[0m (ID: ${u.id})`);
       if (u.volumeChanges.length > 0) {
-        console.log(`     \x1b[36mVolume Changes:\x1b[0m`);
-        u.volumeChanges.forEach(vc => {
-          const icon = vc.type === 'added' ? '🟢 [New]' : '🟡 [Edit]';
-          console.log(`       ${icon} ${vc.volume} (${vc.details})`);
-        });
+         console.log(`     \x1b[36mVolume Changes:\x1b[0m`);
+         u.volumeChanges.forEach(vc => {
+           const icon = vc.type === 'added' ? '🟢 [New]' : '🟡 [Edit]';
+           console.log(`       ${icon} ${vc.volume} (${vc.details})`);
+         });
       }
       if (u.fieldChanges.length > 0) {
         console.log(`     \x1b[35mMetadata Changes:\x1b[0m`);
@@ -671,7 +669,7 @@ async function run() {
   }
 
   if (newNovels.length === 0 && updatedNovels.length === 0) {
-    console.log(`\x1b[32m✓ No new titles or volume updates found. Your main database is up to date with ${path.basename(NEW_DB_PATH)}!\x1b[0m\n`);
+    console.log(`\x1b[32m✓ No new titles or volume updates found. Your main database is up to date with EsNovels1!\x1b[0m\n`);
     return;
   }
 
@@ -726,8 +724,7 @@ async function run() {
     console.log(`Run \x1b[36mnpm run dev\x1b[0m to test the changes in the UI.`);
   } else {
     console.log('💡 \x1b[36mTip:\x1b[0m To merge these changes automatically into your database, run:');
-    const pathArg = customPath ? ` ${customPath}` : '';
-    console.log(`   \x1b[1mnode scripts/sync-novels.js${pathArg} --merge\x1b[0m\n`);
+    console.log(`   \x1b[1mnpm run sync:esnovels:merge\x1b[0m\n`);
   }
 }
 
