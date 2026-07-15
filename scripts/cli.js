@@ -33,8 +33,9 @@ const SCRIPTS = {
     description: 'Downloads the latest catalogue from animestuff.me and runs the local import/sync.',
     reads: ['https://animestuff.me/novels.json (remote)', 'public/data.json'],
     modifies: ['animestuff-data.json (local cache)', 'public/data.json (on execute)', 'backup/ (creates a backup)'],
-    scriptFile: 'sync-animestuff-fetch.js',
+    scriptFile: 'sync-animestuff.js',
     hasCustomPath: false,
+    extraArgs: ['--fetch'],
     executeFlag: '--merge'
   },
   4: {
@@ -42,8 +43,9 @@ const SCRIPTS = {
     description: 'Downloads the latest database from remote EsNovels1 repository and merges updates.',
     reads: ['https://esnovels.github.io/EsNovels1/data.json (remote)', 'public/data.json'],
     modifies: ['public/data.json (on execute)', 'backup/ (creates a backup)'],
-    scriptFile: 'sync-esnovels.js',
+    scriptFile: 'sync-novels.js',
     hasCustomPath: false,
+    extraArgs: ['https://esnovels.github.io/EsNovels1/data.json'],
     executeFlag: '--merge'
   },
   5: {
@@ -88,7 +90,7 @@ async function main() {
     console.log(`Selected: \x1b[36m${selected.name}\x1b[0m`);
     console.log(`\x1b[35m--------------------------------------------------\x1b[0m\n`);
 
-    const runArgs = [];
+    const runArgs = [...(selected.extraArgs || [])];
 
     // Custom Path handling
     if (selected.hasCustomPath) {
@@ -159,7 +161,7 @@ if (directArgs.length > 0) {
 
   if (mapped) {
     const scriptPath = path.resolve(__dirname, mapped.scriptFile);
-    const runArgs = directArgs.slice(1);
+    const runArgs = [...(mapped.extraArgs || []), ...directArgs.slice(1)];
     console.log(`Executing direct bypass command: \x1b[36mnode scripts/${mapped.scriptFile} ${runArgs.join(' ')}\x1b[0m\n`);
     const spawnResult = spawnSync('node', [scriptPath, ...runArgs], { stdio: 'inherit' });
     process.exit(spawnResult.status);

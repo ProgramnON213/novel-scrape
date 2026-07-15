@@ -149,22 +149,7 @@ async function init() {
     const response = await fetch(`${import.meta.env.BASE_URL}data.json?t=${new Date().getTime()}`);
     novelsData = await response.json();
 
-    // Pre-lowercase and pre-split fields for high-performance search filtering
-    novelsData.forEach(novel => {
-      novel._lowercaseTitle = novel.title ? novel.title.toLowerCase() : '';
-      novel._lowercaseAlternative = novel.alternative ? novel.alternative.toLowerCase() : '';
-      novel._lowercaseGenre = novel.genre ? novel.genre.toLowerCase() : '';
-      novel._genreList = novel.genre
-        ? novel.genre.split(',').map(g => g.trim().toLowerCase())
-        : EMPTY_ARRAY;
-      novel._rawGenreList = novel.genre
-        ? novel.genre.split(',').map(g => g.trim())
-        : EMPTY_ARRAY;
-      novel._lowercaseAuthors = novel.authors ? novel.authors.toLowerCase() : '';
-      novel._lowercaseArtist = novel.artist ? novel.artist.toLowerCase() : '';
-      novel._lowercaseSynopsis = novel.synopsis ? novel.synopsis.toLowerCase() : '';
-      novel._lowercaseTranslationGroup = novel.translationGroup ? novel.translationGroup.toLowerCase() : '';
-    });
+    // No pre-computation needed. Search filtering runs dynamically and efficiently on demand.
 
     buildTagSystem();
     applyFilters();
@@ -189,7 +174,9 @@ function updateCachedTags() {
 function buildTagSystem() {
   const allGenres = new Set();
   novelsData.forEach(novel => {
-    novel._rawGenreList.forEach(g => allGenres.add(g));
+    if (novel.genre) {
+      novel.genre.split(',').forEach(g => allGenres.add(g.trim()));
+    }
   });
 
   const sortedGenres = [...allGenres].sort();
@@ -352,7 +339,7 @@ function applyFilters() {
     const isBroken = !novel.cover || novel.cover === '' || brokenCovers.has(novel.id);
     if (settings.hideNoCover && isBroken) return false;
 
-    // Text search (high performance via pre-lowercased fields)
+    // Text search (inline case-insensitive search runs near-instantaneously)
     if (tokens.length > 0) {
       const matchesAll = tokens.every(token => {
         const val = token.value;
@@ -360,25 +347,25 @@ function applyFilters() {
 
         if (pref && recognizedPrefixes.has(pref)) {
           if (pref === 'a' || pref === 'author' || pref === 'authors') {
-            return novel._lowercaseAuthors && novel._lowercaseAuthors.includes(val);
+            return novel.authors && novel.authors.toLowerCase().includes(val);
           }
           if (pref === 'art' || pref === 'artist') {
-            return novel._lowercaseArtist && novel._lowercaseArtist.includes(val);
+            return novel.artist && novel.artist.toLowerCase().includes(val);
           }
           if (pref === 's' || pref === 'synopsis') {
-            return novel._lowercaseSynopsis && novel._lowercaseSynopsis.includes(val);
+            return novel.synopsis && novel.synopsis.toLowerCase().includes(val);
           }
           if (pref === 'g' || pref === 'genre') {
-            return novel._lowercaseGenre && novel._lowercaseGenre.includes(val);
+            return novel.genre && novel.genre.toLowerCase().includes(val);
           }
           if (pref === 't' || pref === 'translator' || pref === 'translationgroup' || pref === 'tg') {
-            return novel._lowercaseTranslationGroup && novel._lowercaseTranslationGroup.includes(val);
+            return novel.translationGroup && novel.translationGroup.toLowerCase().includes(val);
           }
         } else {
           // Default search on unrecognized/null prefix (Title & Alternative Title)
           const rawMatch = token.raw.toLowerCase();
-          return (novel._lowercaseTitle && novel._lowercaseTitle.includes(rawMatch)) ||
-                 (novel._lowercaseAlternative && novel._lowercaseAlternative.includes(rawMatch));
+          return (novel.title && novel.title.toLowerCase().includes(rawMatch)) ||
+                 (novel.alternative && novel.alternative.toLowerCase().includes(rawMatch));
         }
         return false;
       });
@@ -386,10 +373,14 @@ function applyFilters() {
     }
 
     // Tag filters
-    const novelGenres = novel._genreList;
+    if (cachedIncludedTags.length > 0 || cachedExcludedTags.length > 0) {
+      const novelGenres = novel.genre
+        ? novel.genre.split(',').map(g => g.trim().toLowerCase())
+        : EMPTY_ARRAY;
 
-    if (cachedIncludedTags.length > 0 && !cachedIncludedTags.every(tag => novelGenres.includes(tag))) return false;
-    if (cachedExcludedTags.length > 0 && cachedExcludedTags.some(tag => novelGenres.includes(tag))) return false;
+      if (cachedIncludedTags.length > 0 && !cachedIncludedTags.every(tag => novelGenres.includes(tag))) return false;
+      if (cachedExcludedTags.length > 0 && cachedExcludedTags.some(tag => novelGenres.includes(tag))) return false;
+    }
 
     // Library filter
     const entry = getLibEntry(novel.id);

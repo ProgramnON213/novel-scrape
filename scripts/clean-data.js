@@ -1,10 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { normalizeGenres, normalizeString } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAIN_DB_PATH = path.resolve(__dirname, '../public/data.json');
 const BACKUP_DIR = path.resolve(__dirname, '../backup');
+
 
 const args = process.argv.slice(2);
 const isWrite = args.includes('--write') || args.includes('--merge');
@@ -33,69 +35,6 @@ function healTitle(title) {
   return cleaned;
 }
 
-const GENRE_MAPPINGS = {
-  'scifi': 'Sci-fi',
-  'sci-fi': 'Sci-fi',
-  'science fiction': 'Sci-fi',
-  'sliceoflife': 'Slice of Life',
-  'slice of life': 'Slice of Life',
-  'schoollife': 'School Life',
-  'school-life': 'School Life',
-  'school life': 'School Life',
-  'martialarts': 'Martial Arts',
-  'martial arts': 'Martial Arts',
-  'wuxia': 'Wuxia',
-  'xianxia': 'Xianxia',
-  'xuanhuan': 'Xuanhuan',
-  'comedy': 'Comedy',
-  'romance': 'Romance',
-  'action': 'Action',
-  'fantasy': 'Fantasy',
-  'harem': 'Harem',
-  'adventure': 'Adventure',
-  'drama': 'Drama',
-  'ecchi': 'Ecchi',
-  'mecha': 'Mecha',
-  'shounen': 'Shounen',
-  'historical': 'Historical',
-  'mystery': 'Mystery',
-  'supernatural': 'Supernatural',
-  'tragedy': 'Tragedy',
-  'tradegy': 'Tragedy'
-};
-
-const VALID_TAGS = new Set([
-  'Action', 'Adult', 'Adventure', 'Age Gap', 'Antihero Protagonist', 'Apocalypse',
-  'Comedy', 'Dark Fantasy', 'Dragon', 'Drama', 'Ecchi', 'Fantasy', 'Gender Bender',
-  'Harem', 'Historical', 'Horror', 'Isekai', 'Josei', 'Magic', 'Martial Arts',
-  'Mature', 'Mecha', 'Mystery', 'Psychological', 'Romance', 'School Life', 'Sci-fi',
-  'Seinen', 'Shoujo', 'Shoujo Ai', 'Shounen', 'Shounen Ai', 'Slice of Life', 'Smut',
-  'Supernatural', 'Tragedy', 'Yuri'
-]);
-
-const VALID_TAGS_MAP = {};
-for (const tag of VALID_TAGS) {
-  VALID_TAGS_MAP[tag.toLowerCase()] = tag;
-}
-
-function normalizeGenres(genreStr) {
-  if (!genreStr || typeof genreStr !== 'string') return '';
-  const normalizedList = genreStr
-    .split(/[.,]/)
-    .map(g => {
-      const trimmed = g.trim();
-      const lower = trimmed.toLowerCase();
-      if (GENRE_MAPPINGS[lower]) return GENRE_MAPPINGS[lower];
-      if (VALID_TAGS_MAP[lower]) return VALID_TAGS_MAP[lower];
-      return trimmed
-        .replace(/([^\s:\-]+)/g, (match) => {
-          return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
-        });
-    })
-    .filter(Boolean);
-  return Array.from(new Set(normalizedList)).sort().join(', ');
-}
-
 function cleanSynopsis(synopsis) {
   if (!synopsis || typeof synopsis !== 'string') return synopsis;
   let cleaned = synopsis;
@@ -117,9 +56,6 @@ function cleanSynopsis(synopsis) {
   return cleaned;
 }
 
-function normalizeString(str) {
-  return str ? str.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-}
 
 function isDuplicate(a, b) {
   const titleA = normalizeString(a.title);

@@ -1,6 +1,19 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  normalizeString,
+  normalizeGenres,
+  checkTagsValidity,
+  checkUrlExists,
+  loadJSON,
+  formatId,
+  getNextId,
+  diffSnippet,
+  mergeAndSortGenres,
+  GENRE_MAPPINGS,
+  VALID_TAGS_MAP
+} from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -10,32 +23,28 @@ const BACKUP_DIR = path.resolve(__dirname, '../backup');
 
 // Help message check
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log('Usage: node scripts/sync-novels.js [path-to-json] [--merge]');
+  console.log('Usage: node scripts/sync-novels.js [path-to-json-or-url] [--merge]');
   console.log('Options:');
   console.log('  --merge      Merge the detected updates into public/data.json (creates a backup first)');
   console.log('  --help, -h   Show this help message');
   process.exit(0);
 }
 
-// Parse custom path from CLI arguments
+// Parse custom path/URL from CLI arguments
 const args = process.argv.slice(2).filter(arg => arg !== '--merge');
-const customPath = args.length > 0 ? args[0] : null;
-const NEW_DB_PATH = customPath ? path.resolve(customPath) : path.resolve(__dirname, '../new-data.json');
-
-/**
- * Normalizes a string for robust matching.
- */
-function normalizeString(str) {
-  return str ? str.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-}
+const customSource = args.length > 0 ? args[0] : null;
+const isRemote = customSource && (customSource.startsWith('http://') || customSource.startsWith('https://'));
+const NEW_DB_PATH = isRemote 
+  ? customSource 
+  : (customSource ? path.resolve(customSource) : path.resolve(__dirname, '../new-data.json'));
 
 /**
  * Validates the loaded JSON structure.
  * Returns true if valid, false otherwise.
  */
-function validateJSONSchema(data, filePath) {
+function validateJSONSchema(data, sourceName) {
   if (!Array.isArray(data)) {
-    console.error(`\x1b[31mError in "${filePath}": Root element must be a JSON array.\x1b[0m`);
+    console.error(`\x1b[31mError in "${sourceName}": Root element must be a JSON array.\x1b[0m`);
     return false;
   }
 
@@ -80,264 +89,21 @@ function validateJSONSchema(data, filePath) {
 }
 
 /**
- * Loads and parses a JSON file.
+ * Fetches and parses the remote JSON database.
  */
-function loadJSON(filePath) {
-  if (!fs.existsSync(filePath)) {
-    console.error(`\x1b[31mError: File not found at "${filePath}"\x1b[0m`);
-    return null;
-  }
+async function fetchRemoteJSON(url) {
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(content);
+    console.log(`Fetching remote database from: \x1b[36m${url}\x1b[0m ...`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`\x1b[31mFailed to fetch: ${response.status} ${response.statusText}\x1b[0m`);
+      return null;
+    }
+    return await response.json();
   } catch (error) {
-    console.error(`\x1b[31mError parsing JSON from "${filePath}":\x1b[0m`, error.message);
+    console.error(`\x1b[31mError fetching remote JSON:\x1b[0m`, error.message);
     return null;
   }
-}
-
-/**
- * Formats ID to 7-digit zero-padded string.
- */
-function formatId(num) {
-  return String(num).padStart(7, '0');
-}
-
-/**
- * Gets the next available ID by scanning the existing database.
- */
-function getNextId(db) {
-  let maxId = 0;
-  for (const novel of db) {
-    if (novel.id) {
-      const parsed = parseInt(novel.id, 10);
-      if (!isNaN(parsed) && parsed > maxId) {
-        maxId = parsed;
-      }
-    }
-  }
-  return formatId(maxId + 1);
-}
-
-const GENRE_MAPPINGS = {
-  'scifi': 'Sci-fi',
-  'sci-fi': 'Sci-fi',
-  'science fiction': 'Sci-fi',
-  'sliceoflife': 'Slice of Life',
-  'slice of life': 'Slice of Life',
-  'schoollife': 'School Life',
-  'school-life': 'School Life',
-  'school life': 'School Life',
-  'martialarts': 'Martial Arts',
-  'martial arts': 'Martial Arts',
-  'wuxia': 'Wuxia',
-  'xianxia': 'Xianxia',
-  'xuanhuan': 'Xuanhuan',
-  'comedy': 'Comedy',
-  'romance': 'Romance',
-  'action': 'Action',
-  'fantasy': 'Fantasy',
-  'harem': 'Harem',
-  'adventure': 'Adventure',
-  'drama': 'Drama',
-  'ecchi': 'Ecchi',
-  'mecha': 'Mecha',
-  'shounen': 'Shounen',
-  'historical': 'Historical',
-  'mystery': 'Mystery',
-  'supernatural': 'Supernatural',
-  'tragedy': 'Tragedy',
-  'tradegy': 'Tragedy'
-};
-
-const VALID_TAGS = new Set([
-  'Action',
-  'Adult',
-  'Adventure',
-  'Age Gap',
-  'Antihero Protagonist',
-  'Apocalypse',
-  'Comedy',
-  'Dark Fantasy',
-  'Dragon',
-  'Drama',
-  'Ecchi',
-  'Fantasy',
-  'Gender Bender',
-  'Harem',
-  'Historical',
-  'Horror',
-  'Isekai',
-  'Josei',
-  'Magic',
-  'Martial Arts',
-  'Mature',
-  'Mecha',
-  'Mystery',
-  'Psychological',
-  'Romance',
-  'School Life',
-  'Sci-fi',
-  'Seinen',
-  'Shoujo',
-  'Shoujo Ai',
-  'Shounen',
-  'Shounen Ai',
-  'Slice of Life',
-  'Smut',
-  'Supernatural',
-  'Tragedy',
-  'Yuri'
-]);
-
-const VALID_TAGS_MAP = {};
-for (const tag of VALID_TAGS) {
-  VALID_TAGS_MAP[tag.toLowerCase()] = tag;
-}
-
-/**
- * Standardizes genre names to match the database conventions (e.g. Scifi -> Sci-fi, casing, etc.) and sorts them.
- * Supports comma and dot delimiters.
- */
-function normalizeGenres(genreStr) {
-  if (!genreStr || typeof genreStr !== 'string') return '';
-  
-  const normalizedList = genreStr
-    .split(/[.,]/)
-    .map(g => {
-      const trimmed = g.trim();
-      const lower = trimmed.toLowerCase();
-      
-      // Check in mappings
-      if (GENRE_MAPPINGS[lower]) {
-        return GENRE_MAPPINGS[lower];
-      }
-
-      // Check in valid tags map
-      if (VALID_TAGS_MAP[lower]) {
-        return VALID_TAGS_MAP[lower];
-      }
-      
-      // Fallback: title case the genre words (e.g. "slice of life" -> "Slice of Life")
-      return trimmed
-        .replace(/([^\s:\-]+)/g, (match) => {
-          return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
-        });
-    })
-    .filter(Boolean);
-    
-  // Sort alphabetically to maintain consistency across the entire DB
-  return Array.from(new Set(normalizedList)).sort().join(', ');
-}
-
-/**
- * Checks if all tags/genres in the genre string are valid.
- * A tag is valid if it is in the VALID_TAGS set or has a known mapping.
- * Returns { isValid: boolean, invalidTags: string[] }
- */
-function checkTagsValidity(genreStr) {
-  if (!genreStr) return { isValid: true, invalidTags: [] };
-  const tags = genreStr.split(/[.,]/).map(g => g.trim()).filter(Boolean);
-  const invalidTags = [];
-  
-  for (const tag of tags) {
-    const lower = tag.toLowerCase();
-    const mapped = GENRE_MAPPINGS[lower];
-    const isDirectValid = VALID_TAGS_MAP[lower];
-    
-    if (!mapped && !isDirectValid) {
-      invalidTags.push(tag);
-    }
-  }
-  
-  return {
-    isValid: invalidTags.length === 0,
-    invalidTags
-  };
-}
-
-/**
- * Checks if a URL actually loads successfully (HTTP status 200 OK).
- */
-async function checkUrlExists(url) {
-  if (!url || typeof url !== 'string' || !url.startsWith('http')) {
-    return false;
-  }
-  try {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 5000); // 5s timeout
-    const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
-    clearTimeout(id);
-    if (response.ok) return true;
-    
-    // Fall back to GET if HEAD method is not allowed
-    const getController = new AbortController();
-    const getId = setTimeout(() => getController.abort(), 5000);
-    const getResponse = await fetch(url, { method: 'GET', signal: getController.signal });
-    clearTimeout(getId);
-    return getResponse.ok;
-  } catch (e) {
-    return false;
-  }
-}
-
-/**
- * Emphasizes differences between two strings for console reports by showing context around changes.
- */
-function diffSnippet(oldStr, newStr) {
-  if (typeof oldStr !== 'string' || typeof newStr !== 'string') {
-    return `"${oldStr || ''}" ➔ "${newStr || ''}"`;
-  }
-  
-  if (oldStr.length < 80 && newStr.length < 80) {
-    return `"${oldStr}" ➔ "${newStr}"`;
-  }
-
-  let start = 0;
-  while (start < oldStr.length && start < newStr.length && oldStr[start] === newStr[start]) {
-    start++;
-  }
-
-  let oldEnd = oldStr.length - 1;
-  let newEnd = newStr.length - 1;
-  while (oldEnd >= start && newEnd >= start && oldStr[oldEnd] === newStr[newEnd]) {
-    oldEnd--;
-    newEnd--;
-  }
-
-  const contextLen = 20;
-  const contextStart = Math.max(0, start - contextLen);
-  const prefix = (contextStart > 0 ? '...' : '') + oldStr.slice(contextStart, start);
-
-  const contextOldEnd = Math.min(oldStr.length, oldEnd + 1 + contextLen);
-  const suffixOld = oldStr.slice(oldEnd + 1, contextOldEnd) + (contextOldEnd < oldStr.length ? '...' : '');
-
-  const oldChange = oldStr.slice(start, oldEnd + 1);
-  const newChange = newStr.slice(start, newEnd + 1);
-
-  return `\n         Context: "${prefix}[ ${oldChange ? `\x1b[31m-${oldChange}\x1b[0m` : ''} ➔ ${newChange ? `\x1b[32m+${newChange}\x1b[0m` : ''} ]${suffixOld}"`;
-}
-
-/**
- * Merges two comma-separated genre strings, keeping unique values, and sorts them alphabetically.
- */
-function mergeAndSortGenres(existingGenreStr, newGenreStr) {
-  const existingSet = new Set(
-    (existingGenreStr || '')
-      .split(',')
-      .map(g => g.trim())
-      .filter(Boolean)
-  );
-  
-  const newSet = new Set(
-    (newGenreStr || '')
-      .split(',')
-      .map(g => g.trim())
-      .filter(Boolean)
-  );
-
-  const combinedSet = new Set([...existingSet, ...newSet]);
-  return Array.from(combinedSet).sort().join(', ');
 }
 
 /**
@@ -403,18 +169,23 @@ async function run() {
   console.log(`Loaded \x1b[36m${mainDb.length}\x1b[0m novels from the main database.`);
 
   // Load new database
-  if (!fs.existsSync(NEW_DB_PATH)) {
-    console.error(`\x1b[31mError: File not found at "${NEW_DB_PATH}"\x1b[0m`);
-    if (customPath) {
-      console.log(`Please ensure the path you provided is correct: \x1b[36m${customPath}\x1b[0m`);
-    } else {
-      console.log(`Please place your new/partial JSON file at the root named \x1b[36mnew-data.json\x1b[0m and run the script again.`);
-      console.log(`\nAlternatively, specify a custom path: \x1b[90mnode scripts/sync-novels.js <path-to-json>\x1b[0m`);
+  let newDb = null;
+  if (isRemote) {
+    newDb = await fetchRemoteJSON(NEW_DB_PATH);
+  } else {
+    if (!fs.existsSync(NEW_DB_PATH)) {
+      console.error(`\x1b[31mError: File not found at "${NEW_DB_PATH}"\x1b[0m`);
+      if (customSource) {
+        console.log(`Please ensure the path you provided is correct: \x1b[36m${customSource}\x1b[0m`);
+      } else {
+        console.log(`Please place your new/partial JSON file at the root named \x1b[36mnew-data.json\x1b[0m and run the script again.`);
+        console.log(`\nAlternatively, specify a custom path or URL: \x1b[90mnode scripts/sync-novels.js <path-or-url>\x1b[0m`);
+      }
+      process.exit(1);
     }
-    process.exit(1);
+    newDb = loadJSON(NEW_DB_PATH);
   }
 
-  let newDb = loadJSON(NEW_DB_PATH);
   if (!newDb) {
     process.exit(1);
   }
@@ -428,7 +199,8 @@ async function run() {
     process.exit(1);
   }
 
-  console.log(`Loaded \x1b[36m${newDb.length}\x1b[0m novels from the new/partial file.\n`);
+  console.log(`Loaded \x1b[36m${newDb.length}\x1b[0m novels from the new/partial source.\n`);
+
 
   // Build lookup index for main DB
   const idMap = new Map();
@@ -726,7 +498,7 @@ async function run() {
     console.log(`Run \x1b[36mnpm run dev\x1b[0m to test the changes in the UI.`);
   } else {
     console.log('💡 \x1b[36mTip:\x1b[0m To merge these changes automatically into your database, run:');
-    const pathArg = customPath ? ` ${customPath}` : '';
+    const pathArg = customSource ? ` ${customSource}` : '';
     console.log(`   \x1b[1mnode scripts/sync-novels.js${pathArg} --merge\x1b[0m\n`);
   }
 }

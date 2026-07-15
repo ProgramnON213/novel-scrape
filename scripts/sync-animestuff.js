@@ -1,23 +1,33 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { 
+  normalizeString, 
+  normalizeGenres, 
+  checkUrlExists, 
+  loadJSON, 
+  formatId, 
+  getNextId 
+} from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // File paths
 const MAIN_DB_PATH = path.resolve(__dirname, '../public/data.json');
 const BACKUP_DIR   = path.resolve(__dirname, '../backup');
+const REMOTE_DATA_URL = 'https://animestuff.me/novels.json';
 
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log('Usage: node scripts/sync-animestuff.js [path-to-json] [--merge]');
+  console.log('Usage: node scripts/sync-animestuff.js [path-to-json] [--merge] [--fetch]');
   console.log('');
   console.log('Imports NEW novels from an animeStuff catalogue JSON into public/data.json.');
   console.log('Existing novels (matched by title) are skipped untouched.');
   console.log('');
   console.log('Options:');
+  console.log('  --fetch      Fetch the latest catalogue from remote website first');
   console.log('  --merge      Write changes to public/data.json (creates a backup first)');
   console.log('  --help, -h   Show this help message');
   console.log('');
@@ -27,138 +37,11 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 }
 
 const isMerge   = process.argv.includes('--merge');
-const args      = process.argv.slice(2).filter(a => a !== '--merge');
-const inputPath = args.length > 0
+const isFetch   = process.argv.includes('--fetch');
+const args      = process.argv.slice(2).filter(a => a !== '--merge' && a !== '--fetch');
+let inputPath   = args.length > 0
   ? path.resolve(args[0])
   : path.resolve(__dirname, '../animestuff-data.json');
-
-// ---------------------------------------------------------------------------
-// Genre normalization (self-contained copy — keeps this script standalone)
-// ---------------------------------------------------------------------------
-const GENRE_MAPPINGS = {
-  'scifi': 'Sci-fi',
-  'sci-fi': 'Sci-fi',
-  'science fiction': 'Sci-fi',
-  'sliceoflife': 'Slice of Life',
-  'slice of life': 'Slice of Life',
-  'schoollife': 'School Life',
-  'school-life': 'School Life',
-  'school life': 'School Life',
-  'martialarts': 'Martial Arts',
-  'martial arts': 'Martial Arts',
-  'wuxia': 'Wuxia',
-  'xianxia': 'Xianxia',
-  'xuanhuan': 'Xuanhuan',
-  'comedy': 'Comedy',
-  'romance': 'Romance',
-  'action': 'Action',
-  'fantasy': 'Fantasy',
-  'harem': 'Harem',
-  'adventure': 'Adventure',
-  'drama': 'Drama',
-  'ecchi': 'Ecchi',
-  'mecha': 'Mecha',
-  'shounen': 'Shounen',
-  'historical': 'Historical',
-  'mystery': 'Mystery',
-  'supernatural': 'Supernatural',
-  'tragedy': 'Tragedy',
-  'tradegy': 'Tragedy'
-};
-
-const VALID_TAGS = new Set([
-  'Action', 'Adult', 'Adventure', 'Age Gap', 'Antihero Protagonist', 'Apocalypse',
-  'Comedy', 'Dark Fantasy', 'Dragon', 'Drama', 'Ecchi', 'Fantasy', 'Gender Bender',
-  'Harem', 'Historical', 'Horror', 'Isekai', 'Josei', 'Magic', 'Martial Arts',
-  'Mature', 'Mecha', 'Mystery', 'Psychological', 'Romance', 'School Life', 'Sci-fi',
-  'Seinen', 'Shoujo', 'Shoujo Ai', 'Shounen', 'Shounen Ai', 'Slice of Life', 'Smut',
-  'Supernatural', 'Tragedy', 'Wuxia', 'Xianxia', 'Xuanhuan', 'Yuri'
-]);
-
-const VALID_TAGS_MAP = {};
-for (const tag of VALID_TAGS) VALID_TAGS_MAP[tag.toLowerCase()] = tag;
-
-function normalizeGenres(genreStr) {
-  if (!genreStr || typeof genreStr !== 'string') return '';
-  const normalized = genreStr
-    .split(/[.,]/)
-    .map(g => {
-      const trimmed = g.trim();
-      const lower   = trimmed.toLowerCase();
-      if (GENRE_MAPPINGS[lower]) return GENRE_MAPPINGS[lower];
-      if (VALID_TAGS_MAP[lower]) return VALID_TAGS_MAP[lower];
-      return trimmed.replace(/([^\s:\-]+)/g, m => m.charAt(0).toUpperCase() + m.slice(1).toLowerCase());
-    })
-    .filter(Boolean);
-  return Array.from(new Set(normalized)).sort().join(', ');
-}
-
-// ---------------------------------------------------------------------------
-// ID helpers
-// ---------------------------------------------------------------------------
-function formatId(num) { return String(num).padStart(7, '0'); }
-
-function getNextId(db) {
-  let max = 0;
-  for (const n of db) {
-    if (n.id) {
-      const p = parseInt(n.id, 10);
-      if (!isNaN(p) && p > max) max = p;
-    }
-  }
-  return formatId(max + 1);
-}
-
-// ---------------------------------------------------------------------------
-// Network helpers
-// ---------------------------------------------------------------------------
-/**
- * Checks if a URL actually loads successfully (HTTP status 200 OK).
- */
-async function checkUrlExists(url) {
-  if (!url || typeof url !== 'string' || !url.startsWith('http')) {
-    return false;
-  }
-  try {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 5000); // 5s timeout
-    const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
-    clearTimeout(id);
-    if (response.ok) return true;
-    
-    // Fall back to GET if HEAD method is not allowed
-    const getController = new AbortController();
-    const getId = setTimeout(() => getController.abort(), 5000);
-    const getResponse = await fetch(url, { method: 'GET', signal: getController.signal });
-    clearTimeout(getId);
-    return getResponse.ok;
-  } catch (e) {
-    return false;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// String helpers
-// ---------------------------------------------------------------------------
-function normalizeString(str) {
-  return str ? str.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-}
-
-// ---------------------------------------------------------------------------
-// Load / validate JSON
-// ---------------------------------------------------------------------------
-function loadJSON(filePath) {
-  if (!fs.existsSync(filePath)) {
-    console.error(`\x1b[31mError: File not found at "${filePath}"\x1b[0m`);
-    return null;
-  }
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  } catch (err) {
-    console.error(`\x1b[31mError parsing JSON from "${filePath}":\x1b[0m`, err.message);
-    return null;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Normalize animeStuff entry → internal schema
@@ -197,6 +80,29 @@ async function run() {
   console.log('\x1b[35m==================================================');
   console.log('   📥  AnimeStuff → Novel DB Import Tool');
   console.log('==================================================\x1b[0m\n');
+
+  if (isFetch) {
+    console.log(`Fetching remote catalogue from: \x1b[36m${REMOTE_DATA_URL}\x1b[0m ...`);
+    try {
+      const response = await fetch(REMOTE_DATA_URL);
+      if (!response.ok) {
+        console.error(`\x1b[31mFailed to fetch remote catalogue: ${response.status} ${response.statusText}\x1b[0m`);
+        process.exit(1);
+      }
+      const data = await response.json();
+      if (!Array.isArray(data)) {
+        console.error('\x1b[31mError: Fetched remote data is not a valid JSON array.\x1b[0m');
+        process.exit(1);
+      }
+      
+      inputPath = path.resolve(__dirname, '../animestuff-data.json');
+      fs.writeFileSync(inputPath, JSON.stringify(data, null, 2), 'utf-8');
+      console.log(`✓ Remote data saved successfully to: \x1b[90manimestuff-data.json\x1b[0m\n`);
+    } catch (error) {
+      console.error(`\x1b[31mError during remote fetch:\x1b[0m`, error.message);
+      process.exit(1);
+    }
+  }
 
   // Load main DB
   const mainDb = loadJSON(MAIN_DB_PATH);
