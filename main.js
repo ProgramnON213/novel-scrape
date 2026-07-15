@@ -345,8 +345,7 @@ function insertPrefix(prefix) {
 function applyFilters() {
   const queryText = searchInput.value;
   const tokens = parseSearchQuery(queryText);
-  const includedTags = Object.entries(tagStates).filter(([, s]) => s === 'include').map(([t]) => t.toLowerCase());
-  const excludedTags = Object.entries(tagStates).filter(([, s]) => s === 'exclude').map(([t]) => t.toLowerCase());
+  const recognizedPrefixes = new Set(['a', 'author', 'authors', 'art', 'artist', 's', 'synopsis', 'g', 'genre', 't', 'translator', 'translationgroup', 'tg']);
 
   let filtered = novelsData.filter(novel => {
     // Hide no cover
@@ -358,9 +357,8 @@ function applyFilters() {
       const matchesAll = tokens.every(token => {
         const val = token.value;
         const pref = token.prefix;
-        const recognizedPrefixes = ['a', 'author', 'authors', 'art', 'artist', 's', 'synopsis', 'g', 'genre', 't', 'translator', 'translationgroup', 'tg'];
 
-        if (pref && recognizedPrefixes.includes(pref)) {
+        if (pref && recognizedPrefixes.has(pref)) {
           if (pref === 'a' || pref === 'author' || pref === 'authors') {
             return novel._lowercaseAuthors && novel._lowercaseAuthors.includes(val);
           }
@@ -388,12 +386,10 @@ function applyFilters() {
     }
 
     // Tag filters
-    const novelGenres = novel.genre
-      ? novel.genre.split(',').map(g => g.trim().toLowerCase())
-      : [];
+    const novelGenres = novel._genreList;
 
-    if (includedTags.length > 0 && !includedTags.every(tag => novelGenres.includes(tag))) return false;
-    if (excludedTags.length > 0 && excludedTags.some(tag => novelGenres.includes(tag))) return false;
+    if (cachedIncludedTags.length > 0 && !cachedIncludedTags.every(tag => novelGenres.includes(tag))) return false;
+    if (cachedExcludedTags.length > 0 && cachedExcludedTags.some(tag => novelGenres.includes(tag))) return false;
 
     // Library filter
     const entry = getLibEntry(novel.id);
@@ -403,11 +399,19 @@ function applyFilters() {
     return true;
   });
 
-  // Sort: "Reading" novels first, then rest in original order
-  filtered = [
-    ...filtered.filter(n => getLibEntry(n.id).status === 'Reading'),
-    ...filtered.filter(n => getLibEntry(n.id).status !== 'Reading'),
-  ];
+  // Sort: "Reading" novels first, then rest in original order (optimized partitioning)
+  const reading = [];
+  const others = [];
+  const len = filtered.length;
+  for (let i = 0; i < len; i++) {
+    const novel = filtered[i];
+    if (getLibEntry(novel.id).status === 'Reading') {
+      reading.push(novel);
+    } else {
+      others.push(novel);
+    }
+  }
+  filtered = reading.concat(others);
 
   renderGrid(filtered);
 }
@@ -438,7 +442,7 @@ function renderGrid(novels) {
   }
 
   if (novels.length === 0) {
-    grid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 4rem 0;">No novels found matching your filters.</p>';
+    grid.innerHTML = '<p class="grid-message-empty">No novels found matching your filters.</p>';
     return;
   }
 
@@ -450,6 +454,7 @@ function renderGrid(novels) {
 
     const card = document.createElement('div');
     card.className = 'novel-card';
+    card.dataset.id = novel.id;
 
     // Reading badge
     const readingBadge = entry.status === 'Reading'
@@ -477,20 +482,6 @@ function renderGrid(novels) {
       </div>
     `;
 
-    const img = card.querySelector('.novel-cover-img');
-    img.addEventListener('error', () => {
-      if (!brokenCovers.has(novel.id)) {
-        brokenCovers.add(novel.id);
-        settings.brokenCovers = Array.from(brokenCovers);
-        saveSettings();
-        if (settings.hideNoCover) {
-          scheduleRefilter();
-        }
-      }
-      img.src = 'https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover';
-    });
-
-    card.addEventListener('click', () => openModal(novel));
     fragment.appendChild(card);
   });
   grid.appendChild(fragment);
@@ -1499,6 +1490,35 @@ if (qrFileInput) {
 if (settings.syncKey) {
   setTimeout(() => syncData(false), 1000);
 }
+
+// Novel Grid Event Delegation (Clicks & Cover Image Errors)
+grid.addEventListener('click', (e) => {
+  const card = e.target.closest('.novel-card');
+  if (card) {
+    const novelId = card.dataset.id;
+    const novel = novelsData.find(n => n.id === novelId);
+    if (novel) openModal(novel);
+  }
+});
+
+grid.addEventListener('error', (e) => {
+  if (e.target.classList.contains('novel-cover-img')) {
+    const img = e.target;
+    const card = img.closest('.novel-card');
+    if (card) {
+      const novelId = card.dataset.id;
+      if (!brokenCovers.has(novelId)) {
+        brokenCovers.add(novelId);
+        settings.brokenCovers = Array.from(brokenCovers);
+        saveSettings();
+        if (settings.hideNoCover) {
+          scheduleRefilter();
+        }
+      }
+    }
+    img.src = 'https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover';
+  }
+}, true); // Use capture phase because error events do not bubble
 
 /* ============================================================
    START
