@@ -1524,3 +1524,59 @@ h1:hover {
 .sync-btn-group-row button {
   flex: 1;
 }
+
+/* ============================================================
+   UTILITY CLASSES (ELIMINATING INLINE STYLES)
+   ============================================================ */
+.sync-key-val {
+  filter: blur(4px);
+  transition: filter 0.3s ease;
+  cursor: pointer;
+}
+.sync-key-val.revealed {
+  filter: none;
+}
+
+.grid-message-error {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--accent-orange);
+  padding: 2rem 0;
+}
+
+.grid-message-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--text-muted);
+  padding: 4rem 0;
+}
+
+.modal-status-badge {
+  align-self: flex-start;
+  margin-top: 0.2rem;
+}
+
+.sync-config-warning {
+  color: #ff5555;
+  background: rgba(255, 0, 0, 0.1);
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.sync-btn-small {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.sync-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.sync-separator {
+  margin: 1rem 0;
+  color: var(--text-muted);
+}
+
