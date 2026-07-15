@@ -31,7 +31,15 @@
       </div>
     </div>
 
-    <input type="text" id="searchInput" placeholder="Search for novels by title, author, genre..." aria-label="Search novels">
+    <input type="text" id="searchInput" placeholder="Search by title... (or use a:author, s:synopsis)" aria-label="Search novels">
+    <div id="searchHelperBar" class="search-helper-bar">
+      <span class="search-helper-label">Search filters:</span>
+      <button class="search-helper-pill" data-prefix="a:">a: author</button>
+      <button class="search-helper-pill" data-prefix="s:">s: synopsis</button>
+      <button class="search-helper-pill" data-prefix="g:">g: genre</button>
+      <button class="search-helper-pill" data-prefix="t:">t: translator</button>
+      <button class="search-helper-pill" data-prefix="art:">art: artist</button>
+    </div>
 
     <!-- Library Filter Pills -->
     <div class="library-filter-bar">

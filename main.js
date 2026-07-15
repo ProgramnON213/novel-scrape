@@ -37,6 +37,7 @@ let isSyncing = false;
    ============================================================ */
 const grid            = document.getElementById('novelGrid');
 const searchInput     = document.getElementById('searchInput');
+const searchHelperBar = document.getElementById('searchHelperBar');
 const modal           = document.getElementById('novelModal');
 const modalBody       = document.getElementById('modalBody');
 const closeBtn        = document.querySelector('.close-btn');
@@ -150,6 +151,9 @@ async function init() {
       novel._lowercaseAlternative = novel.alternative ? novel.alternative.toLowerCase() : '';
       novel._lowercaseGenre = novel.genre ? novel.genre.toLowerCase() : '';
       novel._lowercaseAuthors = novel.authors ? novel.authors.toLowerCase() : '';
+      novel._lowercaseArtist = novel.artist ? novel.artist.toLowerCase() : '';
+      novel._lowercaseSynopsis = novel.synopsis ? novel.synopsis.toLowerCase() : '';
+      novel._lowercaseTranslationGroup = novel.translationGroup ? novel.translationGroup.toLowerCase() : '';
     });
 
     buildTagSystem();
@@ -270,11 +274,56 @@ function setProgress(novelId, readTitles) {
   saveSettings();
 }
 
+function parseSearchQuery(query) {
+  const tokens = [];
+  if (!query) return tokens;
+
+  // Regex matches: optional_prefix:optional_quoted_value or plain_value
+  const regex = /(\b[a-zA-Z]+:)?("[^"]+"|[^\s]+)/g;
+  let match;
+  while ((match = regex.exec(query)) !== null) {
+    let prefix = match[1] ? match[1].slice(0, -1).toLowerCase() : null;
+    let value = match[2].toLowerCase();
+    const raw = match[0];
+
+    // Strip quotes
+    if (value.startsWith('"') && value.endsWith('"')) {
+      value = value.slice(1, -1);
+    }
+
+    if (value) {
+      tokens.push({ prefix, value, raw });
+    }
+  }
+  return tokens;
+}
+
+function insertPrefix(prefix) {
+  const startPos = searchInput.selectionStart;
+  const endPos = searchInput.selectionEnd;
+  const value = searchInput.value;
+
+  // Add space if there is a character before the cursor and it's not a space
+  const needsSpace = startPos > 0 && value[startPos - 1] !== ' ';
+  const textToInsert = (needsSpace ? ' ' : '') + prefix;
+
+  searchInput.value = value.substring(0, startPos) + textToInsert + value.substring(endPos);
+
+  // Refocus and place cursor right after the newly inserted prefix
+  const newCursorPos = startPos + textToInsert.length;
+  searchInput.focus();
+  searchInput.setSelectionRange(newCursorPos, newCursorPos);
+
+  // Re-run filter
+  scheduleRefilter();
+}
+
 /* ============================================================
    FILTERING & SORTING
    ============================================================ */
 function applyFilters() {
-  const term = searchInput.value.toLowerCase();
+  const queryText = searchInput.value;
+  const tokens = parseSearchQuery(queryText);
   const includedTags = Object.entries(tagStates).filter(([, s]) => s === 'include').map(([t]) => t.toLowerCase());
   const excludedTags = Object.entries(tagStates).filter(([, s]) => s === 'exclude').map(([t]) => t.toLowerCase());
 
@@ -284,13 +333,37 @@ function applyFilters() {
     if (settings.hideNoCover && isBroken) return false;
 
     // Text search (high performance via pre-lowercased fields)
-    if (term) {
-      const matches =
-        novel._lowercaseTitle.includes(term) ||
-        novel._lowercaseAlternative.includes(term) ||
-        novel._lowercaseGenre.includes(term) ||
-        novel._lowercaseAuthors.includes(term);
-      if (!matches) return false;
+    if (tokens.length > 0) {
+      const matchesAll = tokens.every(token => {
+        const val = token.value;
+        const pref = token.prefix;
+        const recognizedPrefixes = ['a', 'author', 'authors', 'art', 'artist', 's', 'synopsis', 'g', 'genre', 't', 'translator', 'translationgroup', 'tg'];
+
+        if (pref && recognizedPrefixes.includes(pref)) {
+          if (pref === 'a' || pref === 'author' || pref === 'authors') {
+            return novel._lowercaseAuthors && novel._lowercaseAuthors.includes(val);
+          }
+          if (pref === 'art' || pref === 'artist') {
+            return novel._lowercaseArtist && novel._lowercaseArtist.includes(val);
+          }
+          if (pref === 's' || pref === 'synopsis') {
+            return novel._lowercaseSynopsis && novel._lowercaseSynopsis.includes(val);
+          }
+          if (pref === 'g' || pref === 'genre') {
+            return novel._lowercaseGenre && novel._lowercaseGenre.includes(val);
+          }
+          if (pref === 't' || pref === 'translator' || pref === 'translationgroup' || pref === 'tg') {
+            return novel._lowercaseTranslationGroup && novel._lowercaseTranslationGroup.includes(val);
+          }
+        } else {
+          // Default search on unrecognized/null prefix (Title & Alternative Title)
+          const rawMatch = token.raw.toLowerCase();
+          return (novel._lowercaseTitle && novel._lowercaseTitle.includes(rawMatch)) ||
+                 (novel._lowercaseAlternative && novel._lowercaseAlternative.includes(rawMatch));
+        }
+        return false;
+      });
+      if (!matchesAll) return false;
     }
 
     // Tag filters
@@ -726,6 +799,24 @@ tagToggleBtn.addEventListener('click', () => {
 });
 clearTagsBtn.addEventListener('click', clearAllTags);
 searchInput.addEventListener('input', scheduleRefilter);
+searchInput.addEventListener('focus', () => {
+  searchHelperBar.classList.add('show');
+});
+searchInput.addEventListener('blur', () => {
+  setTimeout(() => {
+    if (document.activeElement !== searchInput) {
+      searchHelperBar.classList.remove('show');
+    }
+  }, 200);
+});
+
+searchHelperBar.querySelectorAll('.search-helper-pill').forEach(pill => {
+  pill.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const prefix = pill.dataset.prefix;
+    insertPrefix(prefix);
+  });
+});
 
 // Header / Title reset
 if (siteTitle) {
