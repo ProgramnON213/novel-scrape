@@ -16,6 +16,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAIN_DB_PATH = path.resolve(__dirname, '../public/data.json');
 const BACKUP_DIR   = path.resolve(__dirname, '../backup');
 const REMOTE_DATA_URL = 'https://animestuff.me/novels.json';
+const CACHE_PATH   = path.resolve(__dirname, '../public/link-cache.json');
+const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -112,10 +114,34 @@ async function run() {
   }
   console.log(`Loaded \x1b[36m${mainDb.length}\x1b[0m novels from main database.\n`);
 
-  // Build lookup sets (ID + normalized title) for fast duplicate detection
+  // Load link cache
+  let linkCache = {};
+  if (fs.existsSync(CACHE_PATH)) {
+    try {
+      linkCache = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf-8'));
+    } catch (err) {
+      console.warn('⚠️ Failed to parse link cache, starting fresh:', err.message);
+    }
+  }
+
+  const isUrlCachedAndValid = (url) => {
+    if (!url) return false;
+    const cachedTime = linkCache[url];
+    if (!cachedTime) return false;
+    return (Date.now() - cachedTime) < CACHE_EXPIRY_MS;
+  };
+
+  // Build lookup sets and maps (ID + normalized/exact titles) for fast lookup & updates
   const idSet            = new Set(mainDb.map(n => n.id).filter(Boolean));
-  const normalizedTitles = new Set(mainDb.map(n => normalizeString(n.title)));
-  const exactTitles      = new Set(mainDb.map(n => (n.title || '').trim()));
+  const exactTitlesMap   = new Map();
+  const normalizedTitlesMap = new Map();
+
+  mainDb.forEach((n, idx) => {
+    if (n.title) {
+      exactTitlesMap.set(n.title.trim(), idx);
+      normalizedTitlesMap.set(normalizeString(n.title), idx);
+    }
+  });
 
   // Load animeStuff input
   console.log(`Input file: \x1b[90m${inputPath}\x1b[0m`);
@@ -126,10 +152,11 @@ async function run() {
   }
   console.log(`Loaded \x1b[36m${raw.length}\x1b[0m entries from animeStuff catalogue.\n`);
 
-  // Normalize + filter to only genuinely new novels
+  // Normalize + filter to only genuinely new novels or sourceUrl updates
   let skipped = 0;
   let invalid  = 0;
   const newNovels = [];
+  const sourceUrlUpdates = [];
 
   for (const item of raw) {
     const entry = normalizeEntry(item);
@@ -139,48 +166,134 @@ async function run() {
       continue;
     }
 
-    // Skip if already in DB by normalized title or exact title
-    const isExact      = exactTitles.has(entry.title);
-    const isNormalized = normalizedTitles.has(normalizeString(entry.title));
+    // Check if already in DB by normalized title or exact title
+    const hasExact      = exactTitlesMap.has(entry.title);
+    const hasNormalized = normalizedTitlesMap.has(normalizeString(entry.title));
 
-    if (isExact || isNormalized) {
+    if (hasExact || hasNormalized) {
+      const existingIdx = hasExact 
+        ? exactTitlesMap.get(entry.title) 
+        : normalizedTitlesMap.get(normalizeString(entry.title));
+      
+      const existingNovel = mainDb[existingIdx];
+      const incomingSourceUrl = entry.sourceUrl;
+      const existingSourceUrl = existingNovel.sourceUrl || '';
+
+      if (incomingSourceUrl && incomingSourceUrl !== existingSourceUrl) {
+        let exists = false;
+        if (isUrlCachedAndValid(incomingSourceUrl)) {
+          exists = true;
+        } else {
+          console.log(`Checking if sourceUrl for existing novel "${entry.title}" loads: ${incomingSourceUrl}`);
+          exists = await checkUrlExists(incomingSourceUrl);
+          if (exists) {
+            linkCache[incomingSourceUrl] = Date.now();
+          } else {
+            console.log(`\x1b[33m⚠️  [sourceUrl Check Failed] "${entry.title}" incoming sourceUrl did not load. Skipping update.\x1b[0m`);
+            if (linkCache[incomingSourceUrl]) delete linkCache[incomingSourceUrl];
+          }
+        }
+
+        if (exists) {
+          sourceUrlUpdates.push({
+            index: existingIdx,
+            title: existingNovel.title,
+            oldUrl: existingSourceUrl,
+            newUrl: incomingSourceUrl
+          });
+        }
+      }
       skipped++;
     } else {
       // Check if new cover actually loads before keeping it
       if (entry.cover && entry.cover.startsWith('http')) {
-        console.log(`Checking if cover image for new novel "${entry.title}" loads: ${entry.cover}`);
-        const exists = await checkUrlExists(entry.cover);
+        let exists = false;
+        if (isUrlCachedAndValid(entry.cover)) {
+          exists = true;
+        } else {
+          console.log(`Checking if cover image for new novel "${entry.title}" loads: ${entry.cover}`);
+          exists = await checkUrlExists(entry.cover);
+          if (exists) {
+            linkCache[entry.cover] = Date.now();
+          } else {
+            console.log(`\x1b[33m⚠️  [Cover Check Failed] "${entry.title}" cover did not load. Setting cover to empty.\x1b[0m`);
+            if (linkCache[entry.cover]) delete linkCache[entry.cover];
+          }
+        }
         if (!exists) {
-          console.log(`\x1b[33m⚠️  [Cover Check Failed] "${entry.title}" cover did not load. Setting cover to empty.\x1b[0m`);
           entry.cover = '';
+        }
+      }
+      // Check if new sourceUrl actually loads before keeping it
+      if (entry.sourceUrl && entry.sourceUrl.startsWith('http')) {
+        let exists = false;
+        if (isUrlCachedAndValid(entry.sourceUrl)) {
+          exists = true;
+        } else {
+          console.log(`Checking if sourceUrl for new novel "${entry.title}" loads: ${entry.sourceUrl}`);
+          exists = await checkUrlExists(entry.sourceUrl);
+          if (exists) {
+            linkCache[entry.sourceUrl] = Date.now();
+          } else {
+            console.log(`\x1b[33m⚠️  [sourceUrl Check Failed] "${entry.title}" sourceUrl did not load. Setting sourceUrl to empty.\x1b[0m`);
+            if (linkCache[entry.sourceUrl]) delete linkCache[entry.sourceUrl];
+          }
+        }
+        if (!exists) {
+          entry.sourceUrl = '';
         }
       }
       newNovels.push(entry);
     }
   }
 
+  // Save link cache (runs in both dry-run and write mode)
+  try {
+    if (!fs.existsSync(path.dirname(CACHE_PATH))) {
+      fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
+    }
+    fs.writeFileSync(CACHE_PATH, JSON.stringify(linkCache, null, 2), 'utf-8');
+    console.log(`✓ Link validation cache saved successfully to: \x1b[90m${CACHE_PATH}\x1b[0m\n`);
+  } catch (err) {
+    console.error(`⚠️ Failed to save link cache:`, err.message);
+  }
+
   // --- Report ---
   console.log('--------------------------------------------------');
   console.log('📋 IMPORT REPORT:');
-  console.log(`  • Already in database (skipped): \x1b[37m${skipped}\x1b[0m`);
+  console.log(`  • Already in database (skipped): \x1b[37m${skipped - sourceUrlUpdates.length}\x1b[0m`);
+  console.log(`  • Source URLs to update: \x1b[33m${sourceUrlUpdates.length}\x1b[0m`);
   console.log(`  • Invalid / missing title (skipped): \x1b[31m${invalid}\x1b[0m`);
   console.log(`  • New novels to import: \x1b[32m${newNovels.length}\x1b[0m`);
   console.log('--------------------------------------------------\n');
 
-  if (newNovels.length === 0) {
-    console.log('\x1b[32m✓ Nothing to import — your database already contains all detected titles.\x1b[0m\n');
+  if (newNovels.length === 0 && sourceUrlUpdates.length === 0) {
+    console.log('\x1b[32m✓ Nothing to import or update — your database is fully up to date with the catalogue.\x1b[0m\n');
     return;
   }
 
+  // Show preview of sourceUrl updates
+  if (sourceUrlUpdates.length > 0) {
+    console.log('\x1b[33m🔄 SOURCE URL UPDATES DETECTED:\x1b[0m');
+    sourceUrlUpdates.forEach((u, idx) => {
+      console.log(`  ${idx + 1}. \x1b[1m${u.title}\x1b[0m`);
+      console.log(`     Old URL: \x1b[90m${u.oldUrl || '—'}\x1b[0m`);
+      console.log(`     New URL: \x1b[36m${u.newUrl}\x1b[0m`);
+    });
+    console.log();
+  }
+
   // Show preview of new novels
-  console.log('\x1b[32m➕ NEW NOVELS DETECTED:\x1b[0m');
-  newNovels.forEach((n, i) => {
-    console.log(`  ${i + 1}. \x1b[1m${n.title}\x1b[0m`);
-    console.log(`     Genre:  ${n.genre || 'None'}`);
-    console.log(`     Status: ${n.status}`);
-    console.log(`     URL:    \x1b[90m${n.sourceUrl || '—'}\x1b[0m`);
-  });
-  console.log();
+  if (newNovels.length > 0) {
+    console.log('\x1b[32m➕ NEW NOVELS DETECTED:\x1b[0m');
+    newNovels.forEach((n, i) => {
+      console.log(`  ${i + 1}. \x1b[1m${n.title}\x1b[0m`);
+      console.log(`     Genre:  ${n.genre || 'None'}`);
+      console.log(`     Status: ${n.status}`);
+      console.log(`     URL:    \x1b[90m${n.sourceUrl || '—'}\x1b[0m`);
+    });
+    console.log();
+  }
 
   // --- Merge ---
   if (isMerge) {
@@ -195,6 +308,16 @@ async function run() {
 
     // Assign IDs and prepend
     const updatedDb = [...mainDb];
+
+    // Apply sourceUrl updates
+    for (const u of sourceUrlUpdates) {
+      updatedDb[u.index] = {
+        ...updatedDb[u.index],
+        sourceUrl: u.newUrl,
+        newUpdate: 'yes'
+      };
+    }
+
     let nextIdVal   = parseInt(getNextId(mainDb), 10);
 
     for (const n of newNovels) {
@@ -206,7 +329,7 @@ async function run() {
     }
 
     fs.writeFileSync(MAIN_DB_PATH, JSON.stringify(updatedDb, null, 2), 'utf-8');
-    console.log(`\n\x1b[32m✔ Merged successfully! Added \x1b[1m${newNovels.length}\x1b[0m\x1b[32m new titles to public/data.json.\x1b[0m`);
+    console.log(`\n\x1b[32m✔ Merged successfully! Added \x1b[1m${newNovels.length}\x1b[0m\x1b[32m new titles and updated \x1b[1m${sourceUrlUpdates.length}\x1b[0m\x1b[32m sourceUrls in public/data.json.\x1b[0m`);
     console.log(`Run \x1b[36mnpm run dev\x1b[0m to see the changes in the UI.\n`);
   } else {
     console.log('💡 \x1b[36mTip:\x1b[0m To write these changes to your database, run:');

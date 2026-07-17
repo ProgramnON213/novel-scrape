@@ -92,6 +92,16 @@ async function main() {
 
     const runArgs = [...(selected.extraArgs || [])];
 
+    // Link check validation prompt for cleansing (Option 5)
+    if (choice === 5) {
+      console.log('\nDo you want to perform network verification for cover/source links?');
+      console.log('  \x1b[90m(Validation will use the local cache to skip recently verified links)\x1b[0m');
+      const checkLinksInput = await rl.question('Verify links? (y/N): ');
+      if (checkLinksInput.trim().toLowerCase() === 'y') {
+        runArgs.push('--check-links');
+      }
+    }
+
     // Custom Path handling
     if (selected.hasCustomPath) {
       const defaultResolvedPath = path.resolve(__dirname, selected.defaultPath);

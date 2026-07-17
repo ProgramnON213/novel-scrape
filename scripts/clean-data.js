@@ -1,15 +1,21 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { normalizeGenres, normalizeString } from './utils.js';
+import { normalizeGenres, normalizeString, checkUrlExists } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAIN_DB_PATH = path.resolve(__dirname, '../public/data.json');
 const BACKUP_DIR = path.resolve(__dirname, '../backup');
-
+const CACHE_PATH = path.resolve(__dirname, '../public/link-cache.json');
+const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const args = process.argv.slice(2);
 const isWrite = args.includes('--write') || args.includes('--merge');
+const isCheckLinks = args.includes('--check-links');
+
+// Support custom database path if passed as an argument ending in .json
+const jsonArg = args.find(arg => arg.endsWith('.json') && !arg.startsWith('--'));
+const activeDbPath = jsonArg ? path.resolve(jsonArg) : MAIN_DB_PATH;
 
 function healTitle(title) {
   if (!title || typeof title !== 'string') return title;
@@ -86,26 +92,26 @@ function countLinks(entry) {
   return count;
 }
 
-function run() {
+async function run() {
   console.log('--- database cleansing ---');
   if (!isWrite) {
     console.log('💡 Running in PREVIEW (dry-run) mode. No changes will be saved to disk.');
     console.log('   To save modifications, run: \x1b[36mnpm run clean:write\x1b[0m\n');
   } else {
-    console.log('🚀 Running in WRITE mode. Changes will be saved to public/data.json.\n');
+    console.log(`🚀 Running in WRITE mode. Changes will be saved to ${path.basename(activeDbPath)}.\n`);
   }
 
-  if (!fs.existsSync(MAIN_DB_PATH)) {
-    console.error(`\x1b[31mError: Database file not found at ${MAIN_DB_PATH}\x1b[0m`);
+  if (!fs.existsSync(activeDbPath)) {
+    console.error(`\x1b[31mError: Database file not found at ${activeDbPath}\x1b[0m`);
     process.exit(1);
   }
 
-  const dataRaw = fs.readFileSync(MAIN_DB_PATH, 'utf-8');
+  const dataRaw = fs.readFileSync(activeDbPath, 'utf-8');
   let database;
   try {
     database = JSON.parse(dataRaw);
   } catch (err) {
-    console.error(`\x1b[31mError: Failed to parse JSON from ${MAIN_DB_PATH}\x1b[0m`, err.message);
+    console.error(`\x1b[31mError: Failed to parse JSON from ${activeDbPath}\x1b[0m`, err.message);
     process.exit(1);
   }
 
@@ -226,10 +232,20 @@ function run() {
       
       const kept = group[0];
       const keptLinks = countLinks(kept);
-      dedupedDb.push(kept);
 
       console.log(`👯 Duplicate group [${kept.title}] matched ${group.length} entries:`);
       console.log(`   KEEP:    "${kept.title}" (ID: ${kept.id}, Links: ${keptLinks})`);
+
+      // Inherit sourceUrl from duplicates if kept is empty
+      if (!kept.sourceUrl) {
+        const discardedWithUrl = group.slice(1).find(d => d.sourceUrl);
+        if (discardedWithUrl) {
+          kept.sourceUrl = discardedWithUrl.sourceUrl;
+          console.log(`   🔗 Inherited sourceUrl from duplicate ID ${discardedWithUrl.id}: "${kept.sourceUrl}"`);
+        }
+      }
+
+      dedupedDb.push(kept);
       
       group.slice(1).forEach(discarded => {
         discardedCount++;
@@ -258,6 +274,90 @@ function run() {
 
   console.log(`✓ Pruning completed. Removed ${prunedCount} empty entries.`);
 
+  // Task 5.5: Link Validation and Caching
+  let coverChecks = 0;
+  let coverCacheHits = 0;
+  let coverDeadCleared = 0;
+  let sourceUrlChecks = 0;
+  let sourceUrlCacheHits = 0;
+  let sourceUrlDeadCleared = 0;
+  let linkCache = {};
+
+  if (isCheckLinks) {
+    if (fs.existsSync(CACHE_PATH)) {
+      try {
+        linkCache = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf-8'));
+      } catch (err) {
+        console.warn('⚠️ Failed to parse link cache, starting fresh:', err.message);
+      }
+    }
+
+    const isUrlCachedAndValid = (url) => {
+      if (!url) return false;
+      const cachedTime = linkCache[url];
+      if (!cachedTime) return false;
+      return (Date.now() - cachedTime) < CACHE_EXPIRY_MS;
+    };
+
+    console.log('\n--- validating links & covers (network check) ---');
+    for (let i = 0; i < finalDb.length; i++) {
+      const entry = finalDb[i];
+
+      // 1. Verify Cover URL
+      if (entry.cover && entry.cover.startsWith('http')) {
+        coverChecks++;
+        if (isUrlCachedAndValid(entry.cover)) {
+          coverCacheHits++;
+        } else {
+          console.log(`Checking cover for "${entry.title}": ${entry.cover}`);
+          const exists = await checkUrlExists(entry.cover);
+          if (exists) {
+            linkCache[entry.cover] = Date.now();
+          } else {
+            console.log(`\x1b[33m⚠️  [Cover Check Failed] "${entry.title}" cover did not load.\x1b[0m`);
+            coverDeadCleared++;
+            if (isWrite) {
+              entry.cover = '';
+            }
+            if (linkCache[entry.cover]) delete linkCache[entry.cover];
+          }
+        }
+      }
+
+      // 2. Verify Source URL
+      if (entry.sourceUrl && entry.sourceUrl.startsWith('http')) {
+        sourceUrlChecks++;
+        if (isUrlCachedAndValid(entry.sourceUrl)) {
+          sourceUrlCacheHits++;
+        } else {
+          console.log(`Checking sourceUrl for "${entry.title}": ${entry.sourceUrl}`);
+          const exists = await checkUrlExists(entry.sourceUrl);
+          if (exists) {
+            linkCache[entry.sourceUrl] = Date.now();
+          } else {
+            console.log(`\x1b[33m⚠️  [sourceUrl Check Failed] "${entry.title}" sourceUrl did not load.\x1b[0m`);
+            sourceUrlDeadCleared++;
+            if (isWrite) {
+              entry.sourceUrl = '';
+            }
+            if (linkCache[entry.sourceUrl]) delete linkCache[entry.sourceUrl];
+          }
+        }
+      }
+    }
+
+    // Save cache (runs in both dry-run and write mode)
+    try {
+      if (!fs.existsSync(path.dirname(CACHE_PATH))) {
+        fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
+      }
+      fs.writeFileSync(CACHE_PATH, JSON.stringify(linkCache, null, 2), 'utf-8');
+      console.log(`✓ Link validation cache saved to: \x1b[90m${CACHE_PATH}\x1b[0m`);
+    } catch (err) {
+      console.error(`⚠️ Failed to save link cache:`, err.message);
+    }
+  }
+
   // Task 6: Save back and print stats
   console.log('\n--- summary ---');
   console.log(`Loaded entries:       ${database.length}`);
@@ -267,15 +367,22 @@ function run() {
   console.log(`Cleaned synopses:     ${synopsisCleanCount}`);
   console.log(`Discarded duplicates: ${discardedCount}`);
   console.log(`Pruned empty:         ${prunedCount}`);
+  if (isCheckLinks) {
+    console.log(`Cover URL checks:     ${coverChecks} (Cache hits: ${coverCacheHits}, Dead cleared: ${coverDeadCleared})`);
+    console.log(`Source URL checks:    ${sourceUrlChecks} (Cache hits: ${sourceUrlCacheHits}, Dead cleared: ${sourceUrlDeadCleared})`);
+  }
   console.log(`Final database size:  ${finalDb.length}`);
 
   if (isWrite) {
-    fs.writeFileSync(MAIN_DB_PATH, JSON.stringify(finalDb, null, 2), 'utf-8');
-    console.log(`\n\x1b[32m✔ Cleansing successfully completed and saved to public/data.json!\x1b[0m`);
+    fs.writeFileSync(activeDbPath, JSON.stringify(finalDb, null, 2), 'utf-8');
+    console.log(`\n\x1b[32m✔ Cleansing successfully completed and saved to ${path.basename(activeDbPath)}!\x1b[0m`);
   } else {
     console.log(`\n💡 Dry-run completed. No files were modified.`);
   }
 }
 
-run();
+run().catch(err => {
+  console.error('\x1b[31mFatal error:\x1b[0m', err.message);
+  process.exit(1);
+});
 

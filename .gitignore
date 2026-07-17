@@ -21,4 +21,5 @@ Thumbs.db
 backup/
 scraping_log.txt
 scratch_processed_urls.json
+public/link-cache.json
 

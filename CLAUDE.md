@@ -14,8 +14,12 @@ A sleek, dark-themed static web app for browsing and downloading a personal ligh
 - Dev Server: `npm run dev`
 - Production Build: `npm run build`
 - Preview Build: `npm run preview`
+- CLI Control Panel: `npm run cli`
 - DB Sync Dry-Run: `npm run sync` or `node scripts/sync-novels.js [custom-path]`
 - DB Sync Merge: `npm run sync:merge` or `node scripts/sync-novels.js [custom-path] --merge`
+- DB Clean Dry-Run: `npm run clean` (optional: `--check-links`)
+- DB Clean Write: `npm run clean:write` (optional: `--check-links`)
+- Run Clean Tests: `node scripts/clean-data.test.js`
 - Browser Test: `cd browser-test && npm install && node test.js`
 
 ## Code Conventions

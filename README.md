@@ -221,6 +221,31 @@ To keep the database clean, standard, and free of redundant entries or placehold
      npm run clean:write
      ```
 
+#### 🔗 Link Verification & Shared Caching
+By default, the cleansing script runs instantly without performing network requests. You can append the `--check-links` flag to perform network requests validating cover images and source catalogue pages:
+```bash
+# Dry run with link verification
+npm run clean -- --check-links
+
+# Write run with link verification
+npm run clean:write -- --check-links
+```
+
+* **Caching**: Checked URLs are cached locally in `public/link-cache.json` with a 7-day expiration. Verified links are skipped in subsequent runs (across both the sync and cleansing scripts) to eliminate redundant network traffic.
+* **Duplicate sourceUrl Inheritance**: When duplicate records are detected and merged, if the surviving entry lacks a `sourceUrl` but a discarded duplicate has one, the survivor inherits it. This inherited URL is then naturally verified and cached in the validation phase.
+
+---
+
+### Option 4: Interactive CLI Control Panel
+For an interactive, menu-driven interface to run all database operations (syncing, fetching, and cleaning), launch the CLI utility:
+```bash
+npm run cli
+```
+When choosing **`[5] Database Cleansing & Pruning`**, the control panel will prompt you:
+> *Do you want to perform network verification for cover/source links? Verify links? (y/N)*  
+
+Replying `y` automatically appends the link check flags to the process execution.
+
 > **`data.json` lives in `public/`** so Vite copies it verbatim into `dist/` without bundling it. This keeps it easy to diff, edit, and sync in-place.
 
 ---
