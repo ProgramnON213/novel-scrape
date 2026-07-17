@@ -1580,3 +1580,8 @@ h1:hover {
   color: var(--text-muted);
 }
 
+.grid-sentinel {
+  grid-column: 1 / -1;
+  height: 20px;
+  visibility: hidden;
+}

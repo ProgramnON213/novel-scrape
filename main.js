@@ -17,8 +17,15 @@ let novelsData = [];
 // tagStates: { [tagName]: 'neutral' | 'include' | 'exclude' }
 const tagStates = {};
 let cachedIncludedTags = [];
+let excludedTagsRaw = []; // Renamed internally for clarity if needed, keeping cachedExcludedTags
 let cachedExcludedTags = [];
 let activeLibFilter = 'all'; // 'all' | 'favorite' | 'Reading' | 'Plan to Read' | 'Completed' | 'Dropped'
+
+// Infinite scroll/paginated grid rendering state
+let allFilteredNovels = [];
+let renderedCount = 0;
+const PAGE_SIZE = 36;
+let intersectionObserver = null;
 
 /**
  * Settings persisted to localStorage.
@@ -81,6 +88,39 @@ function defaultSettings() {
   };
 }
 
+function sanitizeLibrary(rawLibrary) {
+  const clean = {};
+  if (rawLibrary && typeof rawLibrary === 'object') {
+    for (const [id, entry] of Object.entries(rawLibrary)) {
+      if (id === '__proto__' || id === 'constructor' || id === 'prototype') continue;
+      if (!/^[a-zA-Z0-9_\-]+$/.test(id)) continue;
+      if (entry && typeof entry === 'object') {
+        clean[id] = {
+          favorite: !!entry.favorite,
+          favoriteUpdatedAt: Number(entry.favoriteUpdatedAt) || 0,
+          status: typeof entry.status === 'string' ? entry.status : '',
+          statusUpdatedAt: Number(entry.statusUpdatedAt) || 0
+        };
+      }
+    }
+  }
+  return clean;
+}
+
+function sanitizeProgress(rawProgress) {
+  const clean = {};
+  if (rawProgress && typeof rawProgress === 'object') {
+    for (const [id, arr] of Object.entries(rawProgress)) {
+      if (id === '__proto__' || id === 'constructor' || id === 'prototype') continue;
+      if (!/^[a-zA-Z0-9_\-]+$/.test(id)) continue;
+      if (Array.isArray(arr)) {
+        clean[id] = arr.filter(item => typeof item === 'string');
+      }
+    }
+  }
+  return clean;
+}
+
 function loadSettings() {
   try {
     const raw = localStorage.getItem(LS_SETTINGS_KEY);
@@ -89,11 +129,11 @@ function loadSettings() {
     // Migrate: ensure all keys exist
     return {
       version: SETTINGS_VERSION,
-      library: parsed.library  || {},
-      progress: parsed.progress || {},
+      library: sanitizeLibrary(parsed.library),
+      progress: sanitizeProgress(parsed.progress),
       theme: parsed.theme       || 'theme-midnight',
       hideNoCover: parsed.hideNoCover !== undefined ? parsed.hideNoCover : false,
-      brokenCovers: parsed.brokenCovers || [],
+      brokenCovers: Array.isArray(parsed.brokenCovers) ? parsed.brokenCovers.filter(id => /^[a-zA-Z0-9_\-]+$/.test(id)) : [],
       syncKey: parsed.syncKey || null,
       syncLastTime: parsed.syncLastTime || null,
       customSupabaseUrl: parsed.customSupabaseUrl || '',
@@ -149,7 +189,16 @@ async function init() {
     const response = await fetch(`${import.meta.env.BASE_URL}data.json?t=${new Date().getTime()}`);
     novelsData = await response.json();
 
-    // No pre-computation needed. Search filtering runs dynamically and efficiently on demand.
+    // Pre-calculate lowercased search properties for faster filtering
+    novelsData.forEach(novel => {
+      novel._titleLower = novel.title ? novel.title.toLowerCase() : '';
+      novel._alternativeLower = novel.alternative ? novel.alternative.toLowerCase() : '';
+      novel._authorsLower = novel.authors ? novel.authors.toLowerCase() : '';
+      novel._artistLower = novel.artist ? novel.artist.toLowerCase() : '';
+      novel._synopsisLower = novel.synopsis ? novel.synopsis.toLowerCase() : '';
+      novel._genreLower = novel.genre ? novel.genre.toLowerCase() : '';
+      novel._tgLower = novel.translationGroup ? novel.translationGroup.toLowerCase() : '';
+    });
 
     buildTagSystem();
     applyFilters();
@@ -347,25 +396,24 @@ function applyFilters() {
 
         if (pref && recognizedPrefixes.has(pref)) {
           if (pref === 'a' || pref === 'author' || pref === 'authors') {
-            return novel.authors && novel.authors.toLowerCase().includes(val);
+            return novel._authorsLower.includes(val);
           }
           if (pref === 'art' || pref === 'artist') {
-            return novel.artist && novel.artist.toLowerCase().includes(val);
+            return novel._artistLower.includes(val);
           }
           if (pref === 's' || pref === 'synopsis') {
-            return novel.synopsis && novel.synopsis.toLowerCase().includes(val);
+            return novel._synopsisLower.includes(val);
           }
           if (pref === 'g' || pref === 'genre') {
-            return novel.genre && novel.genre.toLowerCase().includes(val);
+            return novel._genreLower.includes(val);
           }
           if (pref === 't' || pref === 'translator' || pref === 'translationgroup' || pref === 'tg') {
-            return novel.translationGroup && novel.translationGroup.toLowerCase().includes(val);
+            return novel._tgLower.includes(val);
           }
         } else {
           // Default search on unrecognized/null prefix (Title & Alternative Title)
           const rawMatch = token.raw.toLowerCase();
-          return (novel.title && novel.title.toLowerCase().includes(rawMatch)) ||
-                 (novel.alternative && novel.alternative.toLowerCase().includes(rawMatch));
+          return novel._titleLower.includes(rawMatch) || novel._alternativeLower.includes(rawMatch);
         }
         return false;
       });
@@ -417,28 +465,13 @@ function scheduleRefilter() {
 /* ============================================================
    RENDERING
    ============================================================ */
-function renderGrid(novels) {
-  grid.innerHTML = '';
+function appendNextPage() {
+  if (renderedCount >= allFilteredNovels.length) return;
 
-  // --- results summary ---
-  const totalTiles   = novels.length;
-  const totalVolumes = novels.reduce((sum, n) => sum + (parseInt(n.volumesCount, 10) || 0), 0);
-  if (totalTiles === 0) {
-    resultsSummary.textContent = '';
-  } else {
-    const titleWord  = totalTiles   === 1 ? 'title'  : 'titles';
-    const volumeWord = totalVolumes === 1 ? 'volume' : 'volumes';
-    resultsSummary.textContent =
-      `Showing ${totalTiles.toLocaleString()} ${titleWord} · ${totalVolumes.toLocaleString()} ${volumeWord} total`;
-  }
-
-  if (novels.length === 0) {
-    grid.innerHTML = '<p class="grid-message-empty">No novels found matching your filters.</p>';
-    return;
-  }
-
+  const nextBatch = allFilteredNovels.slice(renderedCount, renderedCount + PAGE_SIZE);
   const fragment = document.createDocumentFragment();
-  novels.forEach(novel => {
+
+  nextBatch.forEach(novel => {
     const entry = getLibEntry(novel.id);
     const readVols = getProgress(novel.id);
     const totalVols = (novel.volumes || []).length;
@@ -475,7 +508,69 @@ function renderGrid(novels) {
 
     fragment.appendChild(card);
   });
+
+  // Remove existing sentinel if present
+  const oldSentinel = document.getElementById('gridSentinel');
+  if (oldSentinel) {
+    oldSentinel.remove();
+  }
+
   grid.appendChild(fragment);
+  renderedCount += nextBatch.length;
+
+  // Add new sentinel if there are more items to render
+  if (renderedCount < allFilteredNovels.length) {
+    const sentinel = document.createElement('div');
+    sentinel.id = 'gridSentinel';
+    sentinel.className = 'grid-sentinel';
+    grid.appendChild(sentinel);
+    if (intersectionObserver) {
+      intersectionObserver.observe(sentinel);
+    }
+  }
+}
+
+function renderGrid(novels) {
+  grid.innerHTML = '';
+  allFilteredNovels = novels;
+  renderedCount = 0;
+
+  // Disconnect observer if any
+  if (intersectionObserver) {
+    intersectionObserver.disconnect();
+  }
+
+  // --- results summary ---
+  const totalTiles   = novels.length;
+  const totalVolumes = novels.reduce((sum, n) => sum + (parseInt(n.volumesCount, 10) || 0), 0);
+  if (totalTiles === 0) {
+    resultsSummary.textContent = '';
+  } else {
+    const titleWord  = totalTiles   === 1 ? 'title'  : 'titles';
+    const volumeWord = totalVolumes === 1 ? 'volume' : 'volumes';
+    resultsSummary.textContent =
+      `Showing ${totalTiles.toLocaleString()} ${titleWord} · ${totalVolumes.toLocaleString()} ${volumeWord} total`;
+  }
+
+  if (novels.length === 0) {
+    grid.innerHTML = '<p class="grid-message-empty">No novels found matching your filters.</p>';
+    return;
+  }
+
+  // Setup observer if not already present
+  if (!intersectionObserver) {
+    intersectionObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          appendNextPage();
+        }
+      });
+    }, {
+      rootMargin: '200px' // Fetch before it reaches the viewport
+    });
+  }
+
+  appendNextPage();
 }
 
 /* ============================================================
@@ -665,11 +760,11 @@ function importBackup(file) {
       // Merge — keep version, overwrite library/progress/theme/hideNoCover/brokenCovers
       settings = {
         version: SETTINGS_VERSION,
-        library: parsed.library  || {},
-        progress: parsed.progress || {},
+        library: sanitizeLibrary(parsed.library),
+        progress: sanitizeProgress(parsed.progress),
         theme: parsed.theme       || 'theme-midnight',
         hideNoCover: parsed.hideNoCover !== undefined ? parsed.hideNoCover : false,
-        brokenCovers: parsed.brokenCovers || [],
+        brokenCovers: Array.isArray(parsed.brokenCovers) ? parsed.brokenCovers.filter(id => /^[a-zA-Z0-9_\-]+$/.test(id)) : [],
         // Preserve local sync configurations/state
         syncKey: settings.syncKey,
         syncLastTime: settings.syncLastTime,
@@ -725,13 +820,24 @@ function escapeSynopsis(str) {
 function sanitizeUrl(url) {
   if (!url) return '';
   const trimmed = url.trim();
-  // Strip control characters and check protocol
+  // Strip control characters (including tabs, newlines)
   const sanitized = trimmed.replace(/[^\x20-\x7E]/g, '');
   const lower = sanitized.toLowerCase();
-  if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
-    return '#';
+  
+  // Strict URL safety check: only allow http, https, relative, or fragment/hash.
+  const hasColon = lower.includes(':');
+  const isHttp = lower.startsWith('http://') || lower.startsWith('https://');
+  
+  if (hasColon && !isHttp) {
+    const colonIndex = lower.indexOf(':');
+    const firstSlashIndex = lower.indexOf('/');
+    // If there is no slash or the colon occurs before the first slash, it's a scheme (e.g. javascript:, data:, file:)
+    if (firstSlashIndex === -1 || colonIndex < firstSlashIndex) {
+      return '#';
+    }
   }
-  return escapeHTML(trimmed);
+  
+  return escapeHTML(sanitized);
 }
 
 function escapeAttr(str) {
@@ -1053,10 +1159,12 @@ async function syncData(manual = false) {
       try {
         const decryptedJson = await decryptData(cloudRecord.payload, settings.syncKey);
         const cloudSettings = JSON.parse(decryptedJson);
+        const cleanCloudLibrary = sanitizeLibrary(cloudSettings.library);
+        const cleanCloudProgress = sanitizeProgress(cloudSettings.progress);
         
         // Two-way merge
         let mergedLibrary = { ...settings.library };
-        for (const [id, cEntry] of Object.entries(cloudSettings.library || {})) {
+        for (const [id, cEntry] of Object.entries(cleanCloudLibrary)) {
           if (!mergedLibrary[id]) {
             mergedLibrary[id] = cEntry;
           } else {
@@ -1087,7 +1195,7 @@ async function syncData(manual = false) {
         }
         
         let mergedProgress = { ...settings.progress };
-        for (const [id, cArr] of Object.entries(cloudSettings.progress || {})) {
+        for (const [id, cArr] of Object.entries(cleanCloudProgress)) {
           if (!mergedProgress[id]) {
             mergedProgress[id] = cArr;
           } else {

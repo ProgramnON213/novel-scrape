@@ -1,7 +1,12 @@
 import { chromium } from 'playwright';
 import path from 'path';
+import fs from 'fs';
 
-const ARTIFACTS_DIR = 'C:/Users/khach/.gemini/antigravity/brain/c0ff3d13-e020-4219-9749-2c1d19e6e4af';
+const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.join(process.cwd(), 'screenshots');
+
+if (!fs.existsSync(ARTIFACTS_DIR)) {
+  fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
+}
 
 async function run() {
   console.log('Launching browser...');
