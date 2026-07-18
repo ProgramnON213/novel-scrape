@@ -152,11 +152,11 @@ async function run() {
   }
   console.log(`Loaded \x1b[36m${raw.length}\x1b[0m entries from animeStuff catalogue.\n`);
 
-  // Normalize + filter to only genuinely new novels or sourceUrl updates
+  // Normalize + filter to only genuinely new novels or updates
   let skipped = 0;
   let invalid  = 0;
   const newNovels = [];
-  const sourceUrlUpdates = [];
+  const novelUpdates = []; // Renamed from sourceUrlUpdates
 
   for (const item of raw) {
     const entry = normalizeEntry(item);
@@ -178,28 +178,50 @@ async function run() {
       const existingNovel = mainDb[existingIdx];
       const incomingSourceUrl = entry.sourceUrl;
       const existingSourceUrl = existingNovel.sourceUrl || '';
+      
+      const incomingCover = entry.cover;
+      const existingCover = existingNovel.cover || '';
 
-      if (incomingSourceUrl && incomingSourceUrl !== existingSourceUrl) {
-        let exists = false;
-        if (isUrlCachedAndValid(incomingSourceUrl)) {
-          exists = true;
-        } else {
-          console.log(`Checking if sourceUrl for existing novel "${entry.title}" loads: ${incomingSourceUrl}`);
-          exists = await checkUrlExists(incomingSourceUrl);
-          if (exists) {
-            linkCache[incomingSourceUrl] = Date.now();
+      const needsSourceUpdate = incomingSourceUrl && incomingSourceUrl !== existingSourceUrl;
+      const needsCoverUpdate = incomingCover && incomingCover !== existingCover;
+
+      if (needsSourceUpdate || needsCoverUpdate) {
+        let sourceUrlExists = false;
+        let coverExists = false;
+
+        // Validate sourceUrl if changing
+        if (needsSourceUpdate) {
+          if (isUrlCachedAndValid(incomingSourceUrl)) {
+            sourceUrlExists = true;
           } else {
-            console.log(`\x1b[33m⚠️  [sourceUrl Check Failed] "${entry.title}" incoming sourceUrl did not load. Skipping update.\x1b[0m`);
-            if (linkCache[incomingSourceUrl]) delete linkCache[incomingSourceUrl];
+            console.log(`Checking if sourceUrl for existing novel "${entry.title}" loads: ${incomingSourceUrl}`);
+            sourceUrlExists = await checkUrlExists(incomingSourceUrl);
+            if (sourceUrlExists) linkCache[incomingSourceUrl] = Date.now();
           }
         }
 
-        if (exists) {
-          sourceUrlUpdates.push({
+        // Validate cover if changing
+        if (needsCoverUpdate) {
+          if (isUrlCachedAndValid(incomingCover)) {
+            coverExists = true;
+          } else {
+            console.log(`Checking if cover for existing novel "${entry.title}" loads: ${incomingCover}`);
+            coverExists = await checkUrlExists(incomingCover);
+            if (coverExists) linkCache[incomingCover] = Date.now();
+          }
+        }
+
+        if (needsSourceUpdate && !sourceUrlExists) console.log(`\x1b[33m⚠️  [sourceUrl Check Failed] "${entry.title}" incoming sourceUrl did not load. Skipping sourceUrl update.\x1b[0m`);
+        if (needsCoverUpdate && !coverExists) console.log(`\x1b[33m⚠️  [Cover Check Failed] "${entry.title}" incoming cover did not load. Skipping cover update.\x1b[0m`);
+
+        if ((needsSourceUpdate && sourceUrlExists) || (needsCoverUpdate && coverExists)) {
+          novelUpdates.push({
             index: existingIdx,
             title: existingNovel.title,
-            oldUrl: existingSourceUrl,
-            newUrl: incomingSourceUrl
+            oldUrl: needsSourceUpdate ? existingSourceUrl : null,
+            newUrl: needsSourceUpdate && sourceUrlExists ? incomingSourceUrl : null,
+            oldCover: needsCoverUpdate ? existingCover : null,
+            newCover: needsCoverUpdate && coverExists ? incomingCover : null
           });
         }
       }
@@ -261,24 +283,24 @@ async function run() {
   // --- Report ---
   console.log('--------------------------------------------------');
   console.log('📋 IMPORT REPORT:');
-  console.log(`  • Already in database (skipped): \x1b[37m${skipped - sourceUrlUpdates.length}\x1b[0m`);
-  console.log(`  • Source URLs to update: \x1b[33m${sourceUrlUpdates.length}\x1b[0m`);
+  console.log(`  • Already in database (skipped): \x1b[37m${skipped - novelUpdates.length}\x1b[0m`);
+  console.log(`  • Updates to apply: \x1b[33m${novelUpdates.length}\x1b[0m`);
   console.log(`  • Invalid / missing title (skipped): \x1b[31m${invalid}\x1b[0m`);
   console.log(`  • New novels to import: \x1b[32m${newNovels.length}\x1b[0m`);
   console.log('--------------------------------------------------\n');
 
-  if (newNovels.length === 0 && sourceUrlUpdates.length === 0) {
+  if (newNovels.length === 0 && novelUpdates.length === 0) {
     console.log('\x1b[32m✓ Nothing to import or update — your database is fully up to date with the catalogue.\x1b[0m\n');
     return;
   }
 
-  // Show preview of sourceUrl updates
-  if (sourceUrlUpdates.length > 0) {
-    console.log('\x1b[33m🔄 SOURCE URL UPDATES DETECTED:\x1b[0m');
-    sourceUrlUpdates.forEach((u, idx) => {
+  // Show preview of updates
+  if (novelUpdates.length > 0) {
+    console.log('\x1b[33m🔄 UPDATES DETECTED:\x1b[0m');
+    novelUpdates.forEach((u, idx) => {
       console.log(`  ${idx + 1}. \x1b[1m${u.title}\x1b[0m`);
-      console.log(`     Old URL: \x1b[90m${u.oldUrl || '—'}\x1b[0m`);
-      console.log(`     New URL: \x1b[36m${u.newUrl}\x1b[0m`);
+      if (u.newUrl) console.log(`     Source URL: \x1b[90m${u.oldUrl || '—'}\x1b[0m ➔ \x1b[36m${u.newUrl}\x1b[0m`);
+      if (u.newCover) console.log(`     Cover:      \x1b[90m${u.oldCover || '—'}\x1b[0m ➔ \x1b[36m${u.newCover}\x1b[0m`);
     });
     console.log();
   }
@@ -309,11 +331,12 @@ async function run() {
     // Assign IDs and prepend
     const updatedDb = [...mainDb];
 
-    // Apply sourceUrl updates
-    for (const u of sourceUrlUpdates) {
+    // Apply updates
+    for (const u of novelUpdates) {
       updatedDb[u.index] = {
         ...updatedDb[u.index],
-        sourceUrl: u.newUrl,
+        ...(u.newUrl ? { sourceUrl: u.newUrl } : {}),
+        ...(u.newCover ? { cover: u.newCover } : {}),
         newUpdate: 'yes'
       };
     }
@@ -329,7 +352,7 @@ async function run() {
     }
 
     fs.writeFileSync(MAIN_DB_PATH, JSON.stringify(updatedDb, null, 2), 'utf-8');
-    console.log(`\n\x1b[32m✔ Merged successfully! Added \x1b[1m${newNovels.length}\x1b[0m\x1b[32m new titles and updated \x1b[1m${sourceUrlUpdates.length}\x1b[0m\x1b[32m sourceUrls in public/data.json.\x1b[0m`);
+    console.log(`\n\x1b[32m✔ Merged successfully! Added \x1b[1m${newNovels.length}\x1b[0m\x1b[32m new titles and updated \x1b[1m${novelUpdates.length}\x1b[0m\x1b[32m existing records in public/data.json.\x1b[0m`);
     console.log(`Run \x1b[36mnpm run dev\x1b[0m to see the changes in the UI.\n`);
   } else {
     console.log('💡 \x1b[36mTip:\x1b[0m To write these changes to your database, run:');

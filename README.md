@@ -132,7 +132,7 @@ The novel database (`public/data.json`) can be updated manually or by merging up
 3. Commit and push to `main` — the GitHub Actions workflow will rebuild and redeploy automatically.
 
 ### Option 2: Automated Sync & Merge Script
-If you have a separate JSON file containing new novels or volume link updates, you can compare and merge it automatically.
+If you have a separate JSON file containing new novels or volume link updates, you can compare and merge it automatically. This includes intelligent merging of **sourceUrl** and **cover image** updates for existing novels (validated against network existence).
 
 1. **Compare/Dry-run**:
    - To compare with `new-data.json` at root:
@@ -145,7 +145,7 @@ If you have a separate JSON file containing new novels or volume link updates, y
      ```
 
 2. **Merge Changes**:
-   - To execute the merge and update `public/data.json` (this automatically validates the schema and creates a database backup in `backup/`):
+   - To execute the merge (automatically validates the schema, checks for dead links, and creates a database backup in `backup/`):
      - With root `new-data.json`:
        ```bash
        npm run sync:merge
@@ -156,7 +156,7 @@ If you have a separate JSON file containing new novels or volume link updates, y
        ```
 
 ### Option 2b: Import from animeStuff Catalogue
-If you want to import *new* novels from an animeStuff catalogue JSON (which has a different schema including a flat `genres` array and a source page `url`), you can use the dedicated animeStuff import tool. This will import them as metadata-only entries and save the source link under `sourceUrl`. Match and merge will skip existing novels automatically.
+If you want to import *new* novels from an animeStuff catalogue JSON (which has a different schema including a flat `genres` array and a source page `url`), you can use the dedicated animeStuff import tool. This will import them as metadata-only entries, save the source link under `sourceUrl`, and **automatically update cover images** for existing novels if a newer valid cover URL is provided. Match and merge will skip existing novels automatically.
 
 1. **Compare/Dry-run**:
    - To compare with `animestuff-data.json` at root:
@@ -354,7 +354,6 @@ All design tokens live in the `:root` block of `style.css`:
 ---
 
 ## 🏗️ Architecture Notes for AI Agents
-
 - **`main.js` is a single module** — no bundler-split chunks or imports. All core logic lives here: `init()`, `buildTagSystem()`, `cycleTagState()`, `applyFilters()`, `renderGrid()`, `openModal()`, `exportBackup()`, `importBackup()`. `qrious` is dynamically imported only when the sync modal is opened.
 - **Data flow:** `fetch(data.json)` → `novelsData[]` → `buildTagSystem()` populates `tagStates{}` → `applyFilters()` recomputes the filtered list → `renderGrid()` re-renders the DOM.
 - **Tag state machine:** each genre cycles `neutral → include → exclude → neutral` on click. Filtering requires ALL included genres and NO excluded genres.
@@ -366,6 +365,11 @@ All design tokens live in the `:root` block of `style.css`:
   - Constant variables (`DEFAULT_LIB_ENTRY`, `EMPTY_ARRAY`) are frozen to avoid runtime object allocations in hot paths.
   - Camera QR scanner downscales input frames (max 600px) before processing via `jsQR` to eliminate scanning lag.
 - **Security & Sanitization:** All dynamic content is HTML-escaped (`escapeHTML()` / `escapeSynopsis()`). Link URLs are robustly sanitized by stripping non-printable control characters and blocking harmful protocols (`javascript:`, `data:`, and `vbscript:`).
+- **Database Synchronization**:
+  - `sync-novels.js` and `sync-animestuff.js` manage database integrity.
+  - They perform network validation for `cover` and `sourceUrl` fields. 
+  - `sync-animestuff` supports intelligent merging of updates: if a title exists, it will update the `sourceUrl` and `cover` if the incoming data provides a different, valid network link.
+  - All modified entries are flagged with `newUpdate: 'yes'` to inform the UI.
 - **No state management library** — mutable module-level variables (`novelsData`, `tagStates`, `activeLibFilter`) serve as the store.
 - **`import.meta.env.BASE_URL`** is used when fetching `data.json`, so it works correctly under any Vite `base` path.
 - **Personalization state** lives in a single `settings` object (`LS_SETTINGS_KEY = 'novel_settings'`) and is persisted to `localStorage`. All user data is keyed by `novel.id` (string) so it remains valid regardless of changes to `data.json`.
@@ -373,6 +377,7 @@ All design tokens live in the `:root` block of `style.css`:
 - **Backup schema** is a plain JSON object with `version`, `library`, `progress`, and `theme` keys. The importer validates for `library` and `progress` keys before applying.
 - **Sync flow:** settings are AES-GCM encrypted client-side using a SHA-256 hash of the Sync Key as both the encryption key and the Supabase row ID. All Supabase calls go through secure `SECURITY DEFINER` RPC functions (`get_sync_data` / `set_sync_data`); no direct table access is permitted. An `isSyncing` boolean lock prevents overlapping sync operations.
 - **QR codes** are generated locally using the bundled `qrious` library — no external requests are made, so the Sync Key is never sent to a third-party service.
+
 
 ---
 
