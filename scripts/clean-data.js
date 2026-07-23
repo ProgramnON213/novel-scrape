@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { normalizeGenres, normalizeString, checkUrlExists } from './utils.js';
+import { normalizeGenres, normalizeString, checkUrlExists, loadLinkCache, saveLinkCache, isUrlCachedAndValid } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAIN_DB_PATH = path.resolve(__dirname, '../public/data.json');
@@ -263,6 +263,21 @@ async function run() {
         }
       }
 
+      // Store candidate covers from discarded duplicates for cover fallback
+      const alternateCovers = group.slice(1)
+        .map(d => ({ id: d.id, cover: d.cover }))
+        .filter(d => d.cover && typeof d.cover === 'string' && d.cover.startsWith('http'));
+
+      if (alternateCovers.length > 0) {
+        kept._alternateCovers = alternateCovers;
+      }
+
+      // Inherit cover from duplicates if kept cover is empty
+      if (!kept.cover && alternateCovers.length > 0) {
+        kept.cover = alternateCovers[0].cover;
+        console.log(`   🖼️ Inherited cover from duplicate ID ${alternateCovers[0].id}: "${kept.cover}"`);
+      }
+
       dedupedDb.push(kept);
       
       group.slice(1).forEach(discarded => {
@@ -302,20 +317,9 @@ async function run() {
   let linkCache = {};
 
   if (isCheckLinks) {
-    if (fs.existsSync(CACHE_PATH)) {
-      try {
-        linkCache = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf-8'));
-      } catch (err) {
-        console.warn('⚠️ Failed to parse link cache, starting fresh:', err.message);
-      }
-    }
+    linkCache = loadLinkCache(CACHE_PATH);
 
-    const isUrlCachedAndValid = (url) => {
-      if (!url) return false;
-      const cachedTime = linkCache[url];
-      if (!cachedTime) return false;
-      return (Date.now() - cachedTime) < CACHE_EXPIRY_MS;
-    };
+    const isCached = (url) => isUrlCachedAndValid(url, linkCache, CACHE_EXPIRY_MS);
 
     console.log('\n--- validating links & covers (network check) ---');
     for (let i = 0; i < finalDb.length; i++) {
@@ -324,7 +328,7 @@ async function run() {
       // 1. Verify Cover URL
       if (entry.cover && entry.cover.startsWith('http')) {
         coverChecks++;
-        if (isUrlCachedAndValid(entry.cover)) {
+        if (isCached(entry.cover)) {
           coverCacheHits++;
         } else {
           console.log(`Checking cover for "${entry.title}": ${entry.cover}`);
@@ -333,11 +337,53 @@ async function run() {
             linkCache[entry.cover] = Date.now();
           } else {
             console.log(`\x1b[33m⚠️  [Cover Check Failed] "${entry.title}" cover did not load.\x1b[0m`);
-            coverDeadCleared++;
-            if (isWrite) {
-              entry.cover = '';
-            }
             if (linkCache[entry.cover]) delete linkCache[entry.cover];
+
+            // Fallback: check alternate covers from discarded duplicates if kept cover failed
+            let recovered = false;
+            if (entry._alternateCovers && entry._alternateCovers.length > 0) {
+              for (const alt of entry._alternateCovers) {
+                if (alt.cover === entry.cover) continue;
+                if (isCached(alt.cover)) {
+                  console.log(`   🖼️ Replaced broken cover with valid cached cover from duplicate ID ${alt.id}: "${alt.cover}"`);
+                  entry.cover = alt.cover;
+                  recovered = true;
+                  break;
+                }
+                console.log(`Checking alternate cover from duplicate ID ${alt.id}: ${alt.cover}`);
+                const altExists = await checkUrlExists(alt.cover);
+                if (altExists) {
+                  linkCache[alt.cover] = Date.now();
+                  console.log(`   🖼️ Replaced broken cover with valid cover from duplicate ID ${alt.id}: "${alt.cover}"`);
+                  entry.cover = alt.cover;
+                  recovered = true;
+                  break;
+                }
+              }
+            }
+            if (!recovered) {
+              coverDeadCleared++;
+              if (isWrite) {
+                entry.cover = '';
+              }
+            }
+          }
+        }
+      } else if (!entry.cover && entry._alternateCovers && entry._alternateCovers.length > 0) {
+        // If cover is empty, try finding a valid alternate cover from duplicates
+        for (const alt of entry._alternateCovers) {
+          if (isCached(alt.cover)) {
+            console.log(`   🖼️ Inherited valid cached cover from duplicate ID ${alt.id}: "${alt.cover}"`);
+            entry.cover = alt.cover;
+            break;
+          }
+          console.log(`Checking alternate cover from duplicate ID ${alt.id}: ${alt.cover}`);
+          const altExists = await checkUrlExists(alt.cover);
+          if (altExists) {
+            linkCache[alt.cover] = Date.now();
+            console.log(`   🖼️ Inherited valid cover from duplicate ID ${alt.id}: "${alt.cover}"`);
+            entry.cover = alt.cover;
+            break;
           }
         }
       }
@@ -345,7 +391,7 @@ async function run() {
       // 2. Verify Source URL
       if (entry.sourceUrl && entry.sourceUrl.startsWith('http')) {
         sourceUrlChecks++;
-        if (isUrlCachedAndValid(entry.sourceUrl)) {
+        if (isCached(entry.sourceUrl)) {
           sourceUrlCacheHits++;
         } else {
           console.log(`Checking sourceUrl for "${entry.title}": ${entry.sourceUrl}`);
@@ -365,16 +411,14 @@ async function run() {
     }
 
     // Save cache (runs in both dry-run and write mode)
-    try {
-      if (!fs.existsSync(path.dirname(CACHE_PATH))) {
-        fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
-      }
-      fs.writeFileSync(CACHE_PATH, JSON.stringify(linkCache, null, 2), 'utf-8');
-      console.log(`✓ Link validation cache saved to: \x1b[90m${CACHE_PATH}\x1b[0m`);
-    } catch (err) {
-      console.error(`⚠️ Failed to save link cache:`, err.message);
-    }
+    saveLinkCache(CACHE_PATH, linkCache);
+    console.log(`✓ Link validation cache saved to: \x1b[90m${CACHE_PATH}\x1b[0m`);
   }
+
+  // Clean temporary helper properties before reporting/saving
+  finalDb.forEach(entry => {
+    delete entry._alternateCovers;
+  });
 
   // Task 6: Save back and print stats
   console.log('\n--- summary ---');

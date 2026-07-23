@@ -131,4 +131,42 @@ test('Database Clean Script Link Checking and Caching', async (t) => {
     assert.strictEqual(cleanedDb.length, 1, 'Should merge duplicate records into one');
     assert.strictEqual(cleanedDb[0].sourceUrl, "https://animestuff.me/docs/assets/html/Kamigami-ni-Sodaterareshi-Mono-Saikyou-to-Naru.html", "Survivor should inherit valid sourceUrl from discarded duplicate");
   });
+
+  await t.test('inherits valid cover from duplicate entry if kept cover is broken or missing', () => {
+    const mockData = [
+      {
+        id: "0000005",
+        title: "Duplicate Cover Novel",
+        cover: "https://nonexistent-url-site-dead-test.xyz/dead-cover.jpg",
+        sourceUrl: "",
+        volumes: [
+          { title: "Volume 1", link1: "https://link-center.net/vol1" }
+        ]
+      },
+      {
+        id: "0000006",
+        title: "Duplicate Cover Novel",
+        cover: "https://animestuff.me/novel/Omiai/1.jpg",
+        sourceUrl: "",
+        volumes: []
+      }
+    ];
+
+    setupTempDb(mockData);
+
+    const result = spawnSync('node', [
+      path.resolve(__dirname, 'clean-data.js'),
+      TEMP_DB_PATH,
+      '--check-links',
+      '--write'
+    ], { encoding: 'utf-8' });
+
+    console.log(result.stdout);
+    assert.strictEqual(result.status, 0, 'clean-data.js should exit with status 0 on duplicate run');
+
+    const cleanedDb = JSON.parse(fs.readFileSync(TEMP_DB_PATH, 'utf-8'));
+    assert.strictEqual(cleanedDb.length, 1, 'Should merge duplicate records into one');
+    assert.strictEqual(cleanedDb[0].cover, "https://animestuff.me/novel/Omiai/1.jpg", "Survivor should replace broken cover with valid cover from discarded duplicate");
+  });
 });
+
