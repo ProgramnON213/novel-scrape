@@ -202,3 +202,33 @@ export function mergeAndSortGenres(existingGenreStr, newGenreStr) {
   const combinedSet = new Set([...existingSet, ...newSet]);
   return Array.from(combinedSet).sort().join(', ');
 }
+
+export function loadLinkCache(cachePath) {
+  if (fs.existsSync(cachePath)) {
+    try {
+      return JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+    } catch (err) {
+      console.warn('⚠️ Failed to parse link cache, starting fresh:', err.message);
+    }
+  }
+  return {};
+}
+
+export function saveLinkCache(cachePath, linkCache) {
+  try {
+    if (!fs.existsSync(path.dirname(cachePath))) {
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+    }
+    fs.writeFileSync(cachePath, JSON.stringify(linkCache, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('⚠️ Failed to save link cache:', err.message);
+  }
+}
+
+export function isUrlCachedAndValid(url, linkCache, expiryMs = 7 * 24 * 60 * 60 * 1000) {
+  if (!url || !linkCache) return false;
+  const cachedTime = linkCache[url];
+  if (!cachedTime) return false;
+  return (Date.now() - cachedTime) < expiryMs;
+}
+

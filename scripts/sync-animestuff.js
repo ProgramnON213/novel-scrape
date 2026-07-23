@@ -7,7 +7,10 @@ import {
   checkUrlExists, 
   loadJSON, 
   formatId, 
-  getNextId 
+  getNextId,
+  loadLinkCache,
+  saveLinkCache,
+  isUrlCachedAndValid
 } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -115,21 +118,7 @@ async function run() {
   console.log(`Loaded \x1b[36m${mainDb.length}\x1b[0m novels from main database.\n`);
 
   // Load link cache
-  let linkCache = {};
-  if (fs.existsSync(CACHE_PATH)) {
-    try {
-      linkCache = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf-8'));
-    } catch (err) {
-      console.warn('⚠️ Failed to parse link cache, starting fresh:', err.message);
-    }
-  }
-
-  const isUrlCachedAndValid = (url) => {
-    if (!url) return false;
-    const cachedTime = linkCache[url];
-    if (!cachedTime) return false;
-    return (Date.now() - cachedTime) < CACHE_EXPIRY_MS;
-  };
+  let linkCache = loadLinkCache(CACHE_PATH);
 
   // Build lookup sets and maps (ID + normalized/exact titles) for fast lookup & updates
   const idSet            = new Set(mainDb.map(n => n.id).filter(Boolean));
@@ -191,7 +180,7 @@ async function run() {
 
         // Validate sourceUrl if changing
         if (needsSourceUpdate) {
-          if (isUrlCachedAndValid(incomingSourceUrl)) {
+          if (isUrlCachedAndValid(incomingSourceUrl, linkCache)) {
             sourceUrlExists = true;
           } else {
             console.log(`Checking if sourceUrl for existing novel "${entry.title}" loads: ${incomingSourceUrl}`);
@@ -202,7 +191,7 @@ async function run() {
 
         // Validate cover if changing
         if (needsCoverUpdate) {
-          if (isUrlCachedAndValid(incomingCover)) {
+          if (isUrlCachedAndValid(incomingCover, linkCache)) {
             coverExists = true;
           } else {
             console.log(`Checking if cover for existing novel "${entry.title}" loads: ${incomingCover}`);
@@ -230,7 +219,7 @@ async function run() {
       // Check if new cover actually loads before keeping it
       if (entry.cover && entry.cover.startsWith('http')) {
         let exists = false;
-        if (isUrlCachedAndValid(entry.cover)) {
+        if (isUrlCachedAndValid(entry.cover, linkCache)) {
           exists = true;
         } else {
           console.log(`Checking if cover image for new novel "${entry.title}" loads: ${entry.cover}`);
@@ -249,7 +238,7 @@ async function run() {
       // Check if new sourceUrl actually loads before keeping it
       if (entry.sourceUrl && entry.sourceUrl.startsWith('http')) {
         let exists = false;
-        if (isUrlCachedAndValid(entry.sourceUrl)) {
+        if (isUrlCachedAndValid(entry.sourceUrl, linkCache)) {
           exists = true;
         } else {
           console.log(`Checking if sourceUrl for new novel "${entry.title}" loads: ${entry.sourceUrl}`);
@@ -270,15 +259,8 @@ async function run() {
   }
 
   // Save link cache (runs in both dry-run and write mode)
-  try {
-    if (!fs.existsSync(path.dirname(CACHE_PATH))) {
-      fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
-    }
-    fs.writeFileSync(CACHE_PATH, JSON.stringify(linkCache, null, 2), 'utf-8');
-    console.log(`✓ Link validation cache saved successfully to: \x1b[90m${CACHE_PATH}\x1b[0m\n`);
-  } catch (err) {
-    console.error(`⚠️ Failed to save link cache:`, err.message);
-  }
+  saveLinkCache(CACHE_PATH, linkCache);
+  console.log(`✓ Link validation cache saved successfully to: \x1b[90m${CACHE_PATH}\x1b[0m\n`);
 
   // --- Report ---
   console.log('--------------------------------------------------');

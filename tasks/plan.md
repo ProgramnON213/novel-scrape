@@ -1,19 +1,31 @@
-# Implementation Plan: Synopsis HTML Cleaning
+# Implementation Plan: Repository Cleanup & Code Simplification
 
 ## Overview
-A task to add synopsis HTML cleaning to `scripts/clean-data.js` to convert `<p>` tags into `<br/>` spacing.
+Decompose and execute the audit cleanup tasks: removing leftover log and scratch files, updating `tasks/` documents, pruning legacy unused novel schema properties, and consolidating shared script utilities into `scripts/utils.js`.
 
 ## Architecture Decisions
-- Parse and process `synopsis` within the existing cleansing pipeline.
-- Target `<p>` tags with regex to replace them with double `<br/>` breaks for paragraph separation.
-- Enforce cleanup rules: collapse 3+ consecutive `<br/>` tags, standardize tag case/slashes, and trim leading/trailing HTML breaks.
+- **Safe Data Pruning**: Legacy flags (`recommended`, `newUpdate`, `addToFav`) are pruned during `npm run clean:write`, which automatically generates a timestamped backup in `backup/`.
+- **Utility Centralization**: Common string normalization and JSON formatting helpers are centralized in `scripts/utils.js` for both `sync-novels.js` and `sync-animestuff.js`.
 
 ## Task List
 
-### Phase 1: Implementation
-- [ ] Task 1: Add `cleanSynopsis` helper function to `scripts/clean-data.js`.
-- [ ] Task 2: Integrate synopsis cleaning into the `run()` mapping function and track statistics.
+### Phase 1: Repository Cleanup & Artifact Removal
+- [ ] Task 1: Remove leftover `scraping_log.txt` and `scratch_processed_urls.json`.
+- [ ] Task 2: Create task tracking documents in `tasks/plan.md` and `tasks/todo.md`.
 
-### Phase 2: Verification
-- [ ] Task 3: Run dry-run to verify corrected synopsis outputs.
-- [ ] Task 4: Execute clean write and verify build/tests pass.
+### Phase 2: Schema Pruning & Data Cleansing
+- [ ] Task 3: Add legacy flag pruning to `scripts/clean-data.js` and execute `npm run clean:write`.
+
+### Phase 3: Script Deduplication & Refactoring
+- [ ] Task 4: Centralize shared normalization helpers in `scripts/utils.js` and refactor `scripts/sync-animestuff.js`.
+
+### Checkpoint: Verification
+- [ ] Run `npm run build`
+- [ ] Run `node scripts/clean-data.test.js`
+- [ ] Run `cd browser-test && node test.js`
+
+## Risks and Mitigations
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Unintended schema property deletion | Low | Automatic timestamped backup saved in `backup/` before clean write |
+| Refactoring break in sync script | Medium | Run unit test suite and dry-run comparisons before committing |

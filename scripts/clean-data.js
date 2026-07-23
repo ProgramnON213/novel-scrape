@@ -192,27 +192,45 @@ async function run() {
 
   console.log(`✓ Synopsis cleaning completed. Cleaned synopses for ${synopsisCleanCount} entries.`);
 
+  // Task 3.6: Prune unused legacy schema flags
+  console.log('\n--- pruning legacy schema flags ---');
+  let legacyFlagPruneCount = 0;
+  const cleanedFlagsDb = synopsisCleanedDb.map(entry => {
+    const newEntry = { ...entry };
+    let modified = false;
+    ['recommended', 'newUpdate', 'addToFav'].forEach(flag => {
+      if (flag in newEntry) {
+        delete newEntry[flag];
+        modified = true;
+      }
+    });
+    if (modified) legacyFlagPruneCount++;
+    return newEntry;
+  });
+
+  console.log(`✓ Legacy flag pruning completed. Pruned flags for ${legacyFlagPruneCount} entries.`);
+
   // Task 4: Deduplicate entries (crossover loose matching)
   console.log('\n--- detecting duplicate entries ---');
   const visited = new Set();
   const groups = [];
 
-  for (let i = 0; i < synopsisCleanedDb.length; i++) {
+  for (let i = 0; i < cleanedFlagsDb.length; i++) {
     if (visited.has(i)) continue;
-    const group = [synopsisCleanedDb[i]];
+    const group = [cleanedFlagsDb[i]];
     visited.add(i);
 
-    for (let j = i + 1; j < synopsisCleanedDb.length; j++) {
+    for (let j = i + 1; j < cleanedFlagsDb.length; j++) {
       if (visited.has(j)) continue;
       let matches = false;
       for (const item of group) {
-        if (isDuplicate(item, synopsisCleanedDb[j])) {
+        if (isDuplicate(item, cleanedFlagsDb[j])) {
           matches = true;
           break;
         }
       }
       if (matches) {
-        group.push(synopsisCleanedDb[j]);
+        group.push(cleanedFlagsDb[j]);
         visited.add(j);
       }
     }
@@ -365,6 +383,7 @@ async function run() {
   console.log(`Cleaned alt titles:   ${altCleanCount}`);
   console.log(`Normalized tags:      ${tagNormalizeCount}`);
   console.log(`Cleaned synopses:     ${synopsisCleanCount}`);
+  console.log(`Pruned legacy flags:  ${legacyFlagPruneCount}`);
   console.log(`Discarded duplicates: ${discardedCount}`);
   console.log(`Pruned empty:         ${prunedCount}`);
   if (isCheckLinks) {

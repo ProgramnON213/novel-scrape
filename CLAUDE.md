@@ -5,8 +5,8 @@ A sleek, dark-themed static web app for browsing and downloading a personal ligh
 ## Tech Stack
 - Frontend: HTML5, Vanilla CSS, Vanilla JavaScript (ES modules)
 - Tooling: Vite (v8+), npm
-- Libraries: `jsqr` (client-side QR code parsing)
-- Cloud Storage / Sync: Supabase API (REST endpoints)
+- Libraries: `jsqr` (client-side QR code parsing), `qrious` (QR code generation)
+- Cloud Storage / Sync: Supabase API (`SECURITY DEFINER` RPC endpoints)
 - Encryption: Client-side AES-GCM (Web Crypto API)
 - Testing: Playwright (located in `browser-test/`)
 
@@ -21,6 +21,18 @@ A sleek, dark-themed static web app for browsing and downloading a personal ligh
 - DB Clean Write: `npm run clean:write` (optional: `--check-links`)
 - Run Clean Tests: `node scripts/clean-data.test.js`
 - Browser Test: `cd browser-test && npm install && node test.js`
+
+## Documentation & Architecture Decision Records (ADRs)
+- [User Guide](file:///d:/Download/novel-scrape/docs/user-guide.md) — Comprehensive end-user guide for search, tags, sync, and backups.
+- [Data Maintenance Guide](file:///d:/Download/novel-scrape/docs/data-maintenance-guide.md) — Script operations, database cleansing, multi-source syncing, and CLI panel.
+- [Architecture Guide](file:///d:/Download/novel-scrape/docs/architecture.md) — Technical map, event delegation, and performance architecture for AI agents.
+- [ADR Index](file:///d:/Download/novel-scrape/docs/decisions/):
+  - [ADR-001: Framework-less Single Module Architecture](file:///d:/Download/novel-scrape/docs/decisions/0001-frameworkless-single-module-architecture.md)
+  - [ADR-002: Zero-Knowledge AES-GCM Encryption with Supabase Sync](file:///d:/Download/novel-scrape/docs/decisions/0002-zero-knowledge-aes-gcm-supabase-sync.md)
+  - [ADR-003: Id-Keyed Progress Tracking Schema](file:///d:/Download/novel-scrape/docs/decisions/0003-id-keyed-progress-tracking-schema.md)
+  - [ADR-004: Genre Schema Normalization & Multi-Source Sync Pipeline](file:///d:/Download/novel-scrape/docs/decisions/0004-genre-schema-and-multi-source-sync.md)
+- [Changelog](file:///d:/Download/novel-scrape/CHANGELOG.md) — Semantic versioning and version history.
+- [Contributing Guide](file:///d:/Download/novel-scrape/CONTRIBUTING.md) — Branching, conventional commits, and verification workflow.
 
 ## Code Conventions
 - **Single Module Architecture**: `main.js` is a single file module containing state, modal rendering, events, and sync engine. Avoid splitting `main.js` unless requested.
