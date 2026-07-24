@@ -10,7 +10,8 @@ import {
   getNextId,
   loadLinkCache,
   saveLinkCache,
-  isUrlCachedAndValid
+  isUrlCachedAndValid,
+  createBackup
 } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -304,11 +305,7 @@ async function run() {
     console.log('\x1b[36mProcessing merge into public/data.json...\x1b[0m');
 
     // Backup
-    if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    const timestamp  = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(BACKUP_DIR, `data-backup-${timestamp}.json`);
-    fs.writeFileSync(backupPath, JSON.stringify(mainDb, null, 2), 'utf-8');
-    console.log(`✓ Backup created: \x1b[90m${backupPath}\x1b[0m`);
+    createBackup(mainDb, { prefix: 'data-backup' });
 
     // Assign IDs and prepend
     const updatedDb = [...mainDb];

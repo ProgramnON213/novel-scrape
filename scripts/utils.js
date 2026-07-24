@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 export const GENRE_MAPPINGS = {
   'scifi': 'Sci-fi',
@@ -231,4 +232,37 @@ export function isUrlCachedAndValid(url, linkCache, expiryMs = 7 * 24 * 60 * 60 
   if (!cachedTime) return false;
   return (Date.now() - cachedTime) < expiryMs;
 }
+
+export function createBackup(dbData, options = {}) {
+  const args = options.args || (typeof process !== 'undefined' ? process.argv : []);
+  const isNoBackup = options.noBackup || args.includes('--no-backup');
+  
+  if (isNoBackup) {
+    return null;
+  }
+
+  let targetDir = options.backupDir;
+  
+  // Parse --backup-dir flag from args if present
+  const dirFlagIdx = args.indexOf('--backup-dir');
+  if (dirFlagIdx !== -1 && args[dirFlagIdx + 1]) {
+    targetDir = path.resolve(args[dirFlagIdx + 1]);
+  } else if (!targetDir) {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    targetDir = path.resolve(__dirname, '../backup');
+  }
+
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  const prefix = options.prefix || 'data-backup';
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = path.join(targetDir, `${prefix}-${timestamp}.json`);
+  
+  fs.writeFileSync(backupPath, JSON.stringify(dbData, null, 2), 'utf-8');
+  console.log(`✓ Backup created successfully at: \x1b[90m${backupPath}\x1b[0m`);
+  return backupPath;
+}
+
 

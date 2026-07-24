@@ -7,7 +7,8 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMP_DB_PATH = path.resolve(__dirname, 'temp-test-db.json');
-const CACHE_PATH = path.resolve(__dirname, '../public/link-cache.json');
+const TEMP_BACKUP_DIR = path.resolve(__dirname, 'temp-test-backups');
+const CACHE_PATH = path.resolve(__dirname, 'temp-test-clean-cache.json');
 
 function setupTempDb(data) {
   fs.writeFileSync(TEMP_DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
@@ -16,6 +17,12 @@ function setupTempDb(data) {
 function cleanup() {
   if (fs.existsSync(TEMP_DB_PATH)) {
     fs.unlinkSync(TEMP_DB_PATH);
+  }
+  if (fs.existsSync(TEMP_BACKUP_DIR)) {
+    fs.rmSync(TEMP_BACKUP_DIR, { recursive: true, force: true });
+  }
+  if (fs.existsSync(CACHE_PATH)) {
+    fs.unlinkSync(CACHE_PATH);
   }
 }
 
@@ -54,7 +61,11 @@ test('Database Clean Script Link Checking and Caching', async (t) => {
       path.resolve(__dirname, 'clean-data.js'),
       TEMP_DB_PATH,
       '--check-links',
-      '--write'
+      '--write',
+      '--backup-dir',
+      TEMP_BACKUP_DIR,
+      '--cache-file',
+      CACHE_PATH
     ], { encoding: 'utf-8' });
 
     console.log(result.stdout);
@@ -84,7 +95,9 @@ test('Database Clean Script Link Checking and Caching', async (t) => {
     const result = spawnSync('node', [
       path.resolve(__dirname, 'clean-data.js'),
       TEMP_DB_PATH,
-      '--check-links'
+      '--check-links',
+      '--cache-file',
+      CACHE_PATH
     ], { encoding: 'utf-8' });
 
     console.log(result.stdout);
@@ -121,7 +134,11 @@ test('Database Clean Script Link Checking and Caching', async (t) => {
       path.resolve(__dirname, 'clean-data.js'),
       TEMP_DB_PATH,
       '--check-links',
-      '--write'
+      '--write',
+      '--backup-dir',
+      TEMP_BACKUP_DIR,
+      '--cache-file',
+      CACHE_PATH
     ], { encoding: 'utf-8' });
 
     console.log(result.stdout);
@@ -158,7 +175,11 @@ test('Database Clean Script Link Checking and Caching', async (t) => {
       path.resolve(__dirname, 'clean-data.js'),
       TEMP_DB_PATH,
       '--check-links',
-      '--write'
+      '--write',
+      '--backup-dir',
+      TEMP_BACKUP_DIR,
+      '--cache-file',
+      CACHE_PATH
     ], { encoding: 'utf-8' });
 
     console.log(result.stdout);

@@ -12,7 +12,10 @@ import {
   diffSnippet,
   mergeAndSortGenres,
   GENRE_MAPPINGS,
-  VALID_TAGS_MAP
+  VALID_TAGS_MAP,
+  loadLinkCache,
+  saveLinkCache,
+  isUrlCachedAndValid
 } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,6 +23,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // File paths
 const MAIN_DB_PATH = path.resolve(__dirname, '../public/data.json');
 const BACKUP_DIR = path.resolve(__dirname, '../backup');
+const cacheFileFlagIdx = process.argv.indexOf('--cache-file');
+const CACHE_PATH = (cacheFileFlagIdx !== -1 && process.argv[cacheFileFlagIdx + 1])
+  ? path.resolve(process.argv[cacheFileFlagIdx + 1])
+  : path.resolve(__dirname, '../public/link-cache.json');
+const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Help message check
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
@@ -168,6 +176,9 @@ async function run() {
 
   console.log(`Loaded \x1b[36m${mainDb.length}\x1b[0m novels from the main database.`);
 
+  // Load link cache
+  let linkCache = loadLinkCache(CACHE_PATH);
+
   // Load new database
   let newDb = null;
   if (isRemote) {
@@ -280,6 +291,46 @@ async function run() {
     }
 
     if (mainIndex === -1) {
+      // Check if new novel cover actually loads before keeping it
+      if (newNovel.cover && newNovel.cover.startsWith('http')) {
+        let exists = false;
+        if (isUrlCachedAndValid(newNovel.cover, linkCache, CACHE_EXPIRY_MS)) {
+          exists = true;
+        } else {
+          console.log(`Checking if cover image for new novel "${newNovel.title}" loads: ${newNovel.cover}`);
+          exists = await checkUrlExists(newNovel.cover);
+          if (exists) {
+            linkCache[newNovel.cover] = Date.now();
+          } else {
+            console.log(`\x1b[33m⚠️  [Cover Check Failed] "${newNovel.title}" cover did not load. Setting cover to empty.\x1b[0m`);
+            if (linkCache[newNovel.cover]) delete linkCache[newNovel.cover];
+          }
+        }
+        if (!exists) {
+          newNovel.cover = '';
+        }
+      }
+
+      // Check if new novel sourceUrl actually loads before keeping it
+      if (newNovel.sourceUrl && newNovel.sourceUrl.startsWith('http')) {
+        let exists = false;
+        if (isUrlCachedAndValid(newNovel.sourceUrl, linkCache, CACHE_EXPIRY_MS)) {
+          exists = true;
+        } else {
+          console.log(`Checking if sourceUrl for new novel "${newNovel.title}" loads: ${newNovel.sourceUrl}`);
+          exists = await checkUrlExists(newNovel.sourceUrl);
+          if (exists) {
+            linkCache[newNovel.sourceUrl] = Date.now();
+          } else {
+            console.log(`\x1b[33m⚠️  [sourceUrl Check Failed] "${newNovel.title}" sourceUrl did not load. Setting sourceUrl to empty.\x1b[0m`);
+            if (linkCache[newNovel.sourceUrl]) delete linkCache[newNovel.sourceUrl];
+          }
+        }
+        if (!exists) {
+          newNovel.sourceUrl = '';
+        }
+      }
+
       // It's a brand new novel
       newNovels.push(newNovel);
     } else {
@@ -369,10 +420,40 @@ async function run() {
 
             // Check if updated cover actually loads before replacing it
             if (field === 'cover' && newNovel[field] && newNovel[field].startsWith('http')) {
-              console.log(`Checking if updated cover loads for "${existingNovel.title}": ${newNovel[field]}`);
-              const exists = await checkUrlExists(newNovel[field]);
+              let exists = false;
+              if (isUrlCachedAndValid(newNovel[field], linkCache, CACHE_EXPIRY_MS)) {
+                exists = true;
+              } else {
+                console.log(`Checking if updated cover loads for "${existingNovel.title}": ${newNovel[field]}`);
+                exists = await checkUrlExists(newNovel[field]);
+                if (exists) {
+                  linkCache[newNovel[field]] = Date.now();
+                } else {
+                  console.log(`\x1b[33m⚠️  [Cover Check Failed] "${existingNovel.title}" updated cover did not load. Skipping cover replacement.\x1b[0m`);
+                  if (linkCache[newNovel[field]]) delete linkCache[newNovel[field]];
+                }
+              }
               if (!exists) {
-                console.log(`\x1b[33m⚠️  [Cover Check Failed] "${existingNovel.title}" updated cover did not load. Skipping cover replacement.\x1b[0m`);
+                continue;
+              }
+            }
+
+            // Check if updated sourceUrl actually loads before replacing it
+            if (field === 'sourceUrl' && newNovel[field] && newNovel[field].startsWith('http')) {
+              let exists = false;
+              if (isUrlCachedAndValid(newNovel[field], linkCache, CACHE_EXPIRY_MS)) {
+                exists = true;
+              } else {
+                console.log(`Checking if updated sourceUrl loads for "${existingNovel.title}": ${newNovel[field]}`);
+                exists = await checkUrlExists(newNovel[field]);
+                if (exists) {
+                  linkCache[newNovel[field]] = Date.now();
+                } else {
+                  console.log(`\x1b[33m⚠️  [sourceUrl Check Failed] "${existingNovel.title}" updated sourceUrl did not load. Skipping sourceUrl replacement.\x1b[0m`);
+                  if (linkCache[newNovel[field]]) delete linkCache[newNovel[field]];
+                }
+              }
+              if (!exists) {
                 continue;
               }
             }
@@ -401,6 +482,10 @@ async function run() {
       }
     }
   }
+
+  // Save link cache (runs in both dry-run and write mode)
+  saveLinkCache(CACHE_PATH, linkCache);
+  console.log(`✓ Link validation cache saved to: \x1b[90m${CACHE_PATH}\x1b[0m\n`);
 
   // --- REPORT SECTION ---
   console.log('--------------------------------------------------');
@@ -451,16 +536,8 @@ async function run() {
   if (isMerge) {
     console.log('\x1b[36mProcessing merge into public/data.json...\x1b[0m');
 
-    // Create backup directory if needed
-    if (!fs.existsSync(BACKUP_DIR)) {
-      fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    }
-
     // Write backup file
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(BACKUP_DIR, `data-backup-${timestamp}.json`);
-    fs.writeFileSync(backupPath, JSON.stringify(mainDb, null, 2), 'utf-8');
-    console.log(`✓ Backup created at: \x1b[90m${backupPath}\x1b[0m`);
+    createBackup(mainDb, { prefix: 'data-backup' });
 
     // Prepare updated DB structure
     const updatedDb = [...mainDb];

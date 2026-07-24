@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { loadLinkCache, saveLinkCache, isUrlCachedAndValid } from './utils.js';
+import { loadLinkCache, saveLinkCache, isUrlCachedAndValid, createBackup } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMP_DIR = path.resolve(__dirname, 'temp-test-cache-dir');
@@ -70,4 +70,49 @@ test('Link Cache Utilities (utils.js)', async (t) => {
     const customTtlMs = 1000 * 60 * 30; // 30 minutes
     assert.strictEqual(isUrlCachedAndValid('https://example.com/recent.jpg', mockCache, customTtlMs), false, '1-hour old URL should be invalid under 30-min TTL');
   });
+
+  await t.test('createBackup - creates backup in specified or custom backup directory', () => {
+    const customBackupDir = path.join(TEMP_DIR, 'custom-backups');
+    const mockDb = [{ id: '0000001', title: 'Backup Test' }];
+
+    const createdPath = createBackup(mockDb, {
+      backupDir: customBackupDir,
+      prefix: 'test-backup'
+    });
+
+    assert.ok(createdPath, 'Should return created backup file path');
+    assert.ok(fs.existsSync(createdPath), 'Backup file should exist');
+    assert.ok(createdPath.startsWith(customBackupDir), 'Backup should be inside custom backup directory');
+  });
+
+  await t.test('createBackup - respects --backup-dir and --no-backup CLI args', () => {
+    const customBackupDir = path.join(TEMP_DIR, 'flag-backups');
+    const mockDb = [{ id: '0000001', title: 'Flag Test' }];
+
+    // Test --backup-dir flag
+    const flagPath = createBackup(mockDb, {
+      args: ['node', 'script.js', '--backup-dir', customBackupDir]
+    });
+    assert.ok(flagPath && flagPath.startsWith(customBackupDir), 'Should use path from --backup-dir flag');
+
+    // Test --no-backup flag
+    const noBackupPath = createBackup(mockDb, {
+      args: ['node', 'script.js', '--no-backup']
+    });
+    assert.strictEqual(noBackupPath, null, 'Should return null and skip creation when --no-backup is set');
+  });
+
+  await t.test('createBackup - resolves default backup directory without error', () => {
+    const tempDefaultDir = path.join(TEMP_DIR, 'default-backup-dir');
+    const mockDb = [{ id: '0000001', title: 'Default Path Test' }];
+
+    const createdPath = createBackup(mockDb, {
+      backupDir: tempDefaultDir,
+      args: ['node', 'script.js']
+    });
+
+    assert.ok(createdPath, 'Should resolve path without error');
+    assert.ok(fs.existsSync(createdPath), 'File should exist');
+  });
 });
+

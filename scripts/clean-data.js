@@ -1,17 +1,20 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { normalizeGenres, normalizeString, checkUrlExists, loadLinkCache, saveLinkCache, isUrlCachedAndValid } from './utils.js';
+import { normalizeGenres, normalizeString, checkUrlExists, loadLinkCache, saveLinkCache, isUrlCachedAndValid, createBackup } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAIN_DB_PATH = path.resolve(__dirname, '../public/data.json');
 const BACKUP_DIR = path.resolve(__dirname, '../backup');
-const CACHE_PATH = path.resolve(__dirname, '../public/link-cache.json');
-const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
 const args = process.argv.slice(2);
 const isWrite = args.includes('--write') || args.includes('--merge');
 const isCheckLinks = args.includes('--check-links');
+
+const cacheFileFlagIdx = args.indexOf('--cache-file');
+const CACHE_PATH = (cacheFileFlagIdx !== -1 && args[cacheFileFlagIdx + 1])
+  ? path.resolve(args[cacheFileFlagIdx + 1])
+  : path.resolve(__dirname, '../public/link-cache.json');
+const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Support custom database path if passed as an argument ending in .json
 const jsonArg = args.find(arg => arg.endsWith('.json') && !arg.startsWith('--'));
@@ -124,13 +127,7 @@ async function run() {
 
   // Task 1: Backup if isWrite is active
   if (isWrite) {
-    if (!fs.existsSync(BACKUP_DIR)) {
-      fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    }
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupPath = path.join(BACKUP_DIR, `data-clean-backup-${timestamp}.json`);
-    fs.writeFileSync(backupPath, JSON.stringify(database, null, 2), 'utf-8');
-    console.log(`✓ Backup created successfully at: \x1b[90m${backupPath}\x1b[0m`);
+    createBackup(database, { prefix: 'data-clean-backup' });
   }
 
   // Task 2: Clean titles and alternative titles
