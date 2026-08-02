@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.4] - 2026-08-02
+
+### Fixed
+- **Missing `createBackup` Import**: Fixed `ReferenceError: createBackup is not defined` in `scripts/sync-novels.js` during `--merge` operations by importing `createBackup` from `./utils.js`.
+- **Merge Test Coverage**: Added `--merge` and backup verification test case to `scripts/sync-novels.test.js`.
+
 ## [1.0.3] - 2026-07-24
 
 ### Added

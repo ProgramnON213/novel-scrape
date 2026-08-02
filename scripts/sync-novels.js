@@ -15,7 +15,8 @@ import {
   VALID_TAGS_MAP,
   loadLinkCache,
   saveLinkCache,
-  isUrlCachedAndValid
+  isUrlCachedAndValid,
+  createBackup
 } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
