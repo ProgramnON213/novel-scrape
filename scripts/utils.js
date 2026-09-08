@@ -42,10 +42,9 @@ export const VALID_TAGS = new Set([
   'Supernatural', 'Tragedy', 'Wuxia', 'Xianxia', 'Xuanhuan', 'Yuri'
 ]);
 
-export const VALID_TAGS_MAP = {};
-for (const tag of VALID_TAGS) {
-  VALID_TAGS_MAP[tag.toLowerCase()] = tag;
-}
+export const VALID_TAGS_MAP = Object.fromEntries(
+  Array.from(VALID_TAGS, tag => [tag.toLowerCase(), tag])
+);
 
 export function normalizeString(str) {
   return str ? str.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
@@ -152,37 +151,7 @@ export function getNextId(db) {
 }
 
 export function diffSnippet(oldStr, newStr) {
-  if (typeof oldStr !== 'string' || typeof newStr !== 'string') {
-    return `"${oldStr || ''}" ➔ "${newStr || ''}"`;
-  }
-  
-  if (oldStr.length < 80 && newStr.length < 80) {
-    return `"${oldStr}" ➔ "${newStr}"`;
-  }
-
-  let start = 0;
-  while (start < oldStr.length && start < newStr.length && oldStr[start] === newStr[start]) {
-    start++;
-  }
-
-  let oldEnd = oldStr.length - 1;
-  let newEnd = newStr.length - 1;
-  while (oldEnd >= start && newEnd >= start && oldStr[oldEnd] === newStr[newEnd]) {
-    oldEnd--;
-    newEnd--;
-  }
-
-  const contextLen = 20;
-  const contextStart = Math.max(0, start - contextLen);
-  const prefix = (contextStart > 0 ? '...' : '') + oldStr.slice(contextStart, start);
-
-  const contextOldEnd = Math.min(oldStr.length, oldEnd + 1 + contextLen);
-  const suffixOld = oldStr.slice(oldEnd + 1, contextOldEnd) + (contextOldEnd < oldStr.length ? '...' : '');
-
-  const oldChange = oldStr.slice(start, oldEnd + 1);
-  const newChange = newStr.slice(start, newEnd + 1);
-
-  return `\n         Context: "${prefix}[ ${oldChange ? `\x1b[31m-${oldChange}\x1b[0m` : ''} ➔ ${newChange ? `\x1b[32m+${newChange}\x1b[0m` : ''} ]${suffixOld}"`;
+  return `"${oldStr || ''}" ➔ "${newStr || ''}"`;
 }
 
 export function mergeAndSortGenres(existingGenreStr, newGenreStr) {

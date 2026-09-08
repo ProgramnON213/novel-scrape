@@ -7,8 +7,15 @@ const LS_SETTINGS_KEY = 'novel_settings';
 const SETTINGS_VERSION = 1;
 const READING_STATUS_OPTIONS = ['', 'Reading', 'Plan to Read', 'Completed', 'Dropped'];
 const THEMES = ['theme-midnight', 'theme-sakura', 'theme-cyberpunk'];
-const DEFAULT_LIB_ENTRY = Object.freeze({ favorite: false, status: '' });
-const EMPTY_ARRAY = Object.freeze([]);
+const DEFAULT_LIB_ENTRY = { favorite: false, status: '' };
+const EMPTY_ARRAY = [];
+const RECOGNIZED_PREFIXES = new Set([
+  'a', 'author', 'authors',
+  'art', 'artist',
+  's', 'synopsis',
+  'g', 'genre',
+  't', 'translator', 'translationgroup', 'tg'
+]);
 
 /* ============================================================
    STATE
@@ -17,7 +24,6 @@ let novelsData = [];
 // tagStates: { [tagName]: 'neutral' | 'include' | 'exclude' }
 const tagStates = {};
 let cachedIncludedTags = [];
-let excludedTagsRaw = []; // Renamed internally for clarity if needed, keeping cachedExcludedTags
 let cachedExcludedTags = [];
 let activeLibFilter = 'all'; // 'all' | 'favorite' | 'Reading' | 'Plan to Read' | 'Completed' | 'Dropped'
 
@@ -268,12 +274,14 @@ function updateTagUI() {
   }
 }
 
-function clearAllTags() {
+function clearAllTags(shouldFilter = true) {
   Object.keys(tagStates).forEach(tag => { tagStates[tag] = 'neutral'; });
   document.querySelectorAll('.tag-pill').forEach(pill => { pill.dataset.state = 'neutral'; });
   updateCachedTags();
   updateTagUI();
-  applyFilters();
+  if (shouldFilter) {
+    applyFilters();
+  }
 }
 
 function resetAllFilters() {
@@ -281,10 +289,7 @@ function resetAllFilters() {
   searchInput.value = '';
   
   // Clear tag states & UI
-  Object.keys(tagStates).forEach(tag => { tagStates[tag] = 'neutral'; });
-  document.querySelectorAll('.tag-pill').forEach(pill => { pill.dataset.state = 'neutral'; });
-  updateCachedTags();
-  updateTagUI();
+  clearAllTags(false);
 
   // Reset library filter to 'all'
   activeLibFilter = 'all';
@@ -381,7 +386,6 @@ function insertPrefix(prefix) {
 function applyFilters() {
   const queryText = searchInput.value;
   const tokens = parseSearchQuery(queryText);
-  const recognizedPrefixes = new Set(['a', 'author', 'authors', 'art', 'artist', 's', 'synopsis', 'g', 'genre', 't', 'translator', 'translationgroup', 'tg']);
 
   let filtered = novelsData.filter(novel => {
     // Hide no cover
@@ -394,7 +398,7 @@ function applyFilters() {
         const val = token.value;
         const pref = token.prefix;
 
-        if (pref && recognizedPrefixes.has(pref)) {
+        if (pref && RECOGNIZED_PREFIXES.has(pref)) {
           if (pref === 'a' || pref === 'author' || pref === 'authors') {
             return novel._authorsLower.includes(val);
           }
@@ -597,8 +601,6 @@ function copyToClipboard(text, buttonId, originalText) {
 function openModal(novel) {
   const entry = getLibEntry(novel.id);
   const readTitles = getProgress(novel.id);
-  const epubs = [];
-  const pdfs = [];
 
   // --- Volumes HTML ---
   let volumesHtml = '';
@@ -610,18 +612,16 @@ function openModal(novel) {
 
     volumesHtml = `<div class="volumes-list">`;
     novel.volumes.forEach(vol => {
-      if (vol.link1) epubs.push(vol.link1);
-      if (vol.link2) pdfs.push(vol.link2);
       const isRead = readTitles.includes(vol.title);
       volumesHtml += `
-        <div class="volume-item${isRead ? ' vol-read' : ''}" data-vol-title="${escapeAttr(vol.title)}">
+        <div class="volume-item${isRead ? ' vol-read' : ''}" data-vol-title="${escapeHTML(vol.title)}">
           <div class="vol-left">
-            <input type="checkbox" class="vol-checkbox" data-novel-id="${novel.id}" data-vol-title="${escapeAttr(vol.title)}" ${isRead ? 'checked' : ''}>
+            <input type="checkbox" class="vol-checkbox" data-novel-id="${escapeHTML(novel.id)}" data-vol-title="${escapeHTML(vol.title)}" ${isRead ? 'checked' : ''}>
             <span class="vol-title">${escapeHTML(vol.title)}</span>
           </div>
           <div class="volume-links">
-            ${vol.link1 ? `<a href="${sanitizeUrl(vol.link1)}" target="_blank" class="epub-btn">EPUB</a>` : ''}
-            ${vol.link2 ? `<a href="${sanitizeUrl(vol.link2)}" target="_blank" class="pdf-btn">PDF</a>` : ''}
+            ${vol.link1 ? `<a href="${sanitizeUrl(vol.link1)}" target="_blank" rel="noopener noreferrer" class="epub-btn">EPUB</a>` : ''}
+            ${vol.link2 ? `<a href="${sanitizeUrl(vol.link2)}" target="_blank" rel="noopener noreferrer" class="pdf-btn">PDF</a>` : ''}
           </div>
         </div>
       `;
@@ -642,17 +642,21 @@ function openModal(novel) {
   // --- Copy buttons ---
   let copyButtonsHtml = '';
   if (novel.volumes && novel.volumes.length > 0) {
-    copyButtonsHtml = `
-      <div class="copy-actions">
-        ${epubs.length > 0 ? `<button class="copy-btn purple-btn" id="copyEpubsBtn" data-novel-id="${novel.id}">Copy All EPUB Links</button>` : ''}
-        ${pdfs.length > 0 ? `<button class="copy-btn orange-btn" id="copyPdfsBtn" data-novel-id="${novel.id}">Copy All PDF Links</button>` : ''}
-      </div>
-    `;
+    const hasEpubs = novel.volumes.some(v => v.link1);
+    const hasPdfs = novel.volumes.some(v => v.link2);
+    if (hasEpubs || hasPdfs) {
+      copyButtonsHtml = `
+        <div class="copy-actions">
+          ${hasEpubs ? `<button class="copy-btn purple-btn" id="copyEpubsBtn" data-novel-id="${escapeHTML(novel.id)}">Copy All EPUB Links</button>` : ''}
+          ${hasPdfs ? `<button class="copy-btn orange-btn" id="copyPdfsBtn" data-novel-id="${escapeHTML(novel.id)}">Copy All PDF Links</button>` : ''}
+        </div>
+      `;
+    }
   }
 
   // --- Status options ---
   const statusOptions = READING_STATUS_OPTIONS.map(s =>
-    `<option value="${escapeAttr(s)}" ${entry.status === s ? 'selected' : ''}>${escapeHTML(s) || '— None —'}</option>`
+    `<option value="${escapeHTML(s)}" ${entry.status === s ? 'selected' : ''}>${escapeHTML(s) || '— None —'}</option>`
   ).join('');
 
   // --- Build modal ---
@@ -840,10 +844,6 @@ function sanitizeUrl(url) {
   return escapeHTML(sanitized);
 }
 
-function escapeAttr(str) {
-  return escapeHTML(str);
-}
-
 /* ============================================================
    EVENT LISTENERS
    ============================================================ */
@@ -979,6 +979,8 @@ async function decryptData(base64Ciphertext, passphrase) {
 let localStream = null;
 let isScanning = false;
 let scanAnimFrame = null;
+let scanCanvas = null;
+let scanCtx = null;
 
 function stopCameraScan() {
   isScanning = false;
@@ -987,6 +989,8 @@ function stopCameraScan() {
     localStream.getTracks().forEach(track => track.stop());
     localStream = null;
   }
+  scanCanvas = null;
+  scanCtx = null;
   const container = document.getElementById('scannerContainer');
   if (container) container.classList.remove('active');
   const video = document.getElementById('scannerVideo');
@@ -1031,12 +1035,16 @@ function scanTick() {
         height = maxDimension;
       }
     }
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, width, height);
-    const imgData = ctx.getImageData(0, 0, width, height);
+    if (!scanCanvas) {
+      scanCanvas = document.createElement('canvas');
+      scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (scanCanvas.width !== width || scanCanvas.height !== height) {
+      scanCanvas.width = width;
+      scanCanvas.height = height;
+    }
+    scanCtx.drawImage(video, 0, 0, width, height);
+    const imgData = scanCtx.getImageData(0, 0, width, height);
     const code = jsQR(imgData.data, imgData.width, imgData.height);
     if (code) {
       showToast('QR Code detected!', 'success');
@@ -1205,13 +1213,7 @@ async function syncData(manual = false) {
         
         settings.library = mergedLibrary;
         settings.progress = mergedProgress;
-        
-        // Disable scheduling temporarily so we don't recursive loop
-        const tmpTimeout = syncTimeout;
-        syncTimeout = 'LOCKED';
         localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(settings));
-        syncTimeout = tmpTimeout;
-        
         applyFilters(); // Re-render grid
       } catch (err) {
         console.error('Decryption failed, maybe wrong key?', err);
@@ -1486,10 +1488,10 @@ function renderDevPanel() {
       </button>
       <div id="devPanelContent" class="sync-dev-content">
         <label>Custom Supabase URL
-          <input type="text" id="customSupabaseUrl" class="sync-input" value="${escapeAttr(settings.customSupabaseUrl)}" placeholder="https://..." />
+          <input type="text" id="customSupabaseUrl" class="sync-input" value="${escapeHTML(settings.customSupabaseUrl)}" placeholder="https://..." />
         </label>
         <label>Custom Supabase Publishable Key
-          <input type="password" id="customSupabaseAnonKey" class="sync-input" value="${escapeAttr(settings.customSupabaseAnonKey)}" placeholder="eyJhbG..." />
+          <input type="password" id="customSupabaseAnonKey" class="sync-input" value="${escapeHTML(settings.customSupabaseAnonKey)}" placeholder="eyJhbG..." />
         </label>
         <button id="saveDevConfigBtn" class="sync-btn-secondary">Save Config</button>
       </div>

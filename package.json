@@ -1,6 +1,6 @@
 {
   "name": "novel-scrape",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -17,9 +17,7 @@
     "sync:esnovels": "node scripts/sync-novels.js https://esnovels.github.io/EsNovels1/data.json",
     "sync:esnovels:merge": "node scripts/sync-novels.js https://esnovels.github.io/EsNovels1/data.json --merge",
     "clean": "node scripts/clean-data.js",
-    "clean:write": "node scripts/clean-data.js --write",
-    "clean:backups": "node scripts/clean-backups.js",
-    "clean:backups:write": "node scripts/clean-backups.js --write"
+    "clean:write": "node scripts/clean-data.js --write"
   },
   "keywords": [],
   "author": "",

@@ -53,16 +53,7 @@ function cleanSynopsis(synopsis) {
   cleaned = cleaned.replace(/<\/p>/gi, '<br/><br/>');
   cleaned = cleaned.replace(/<br\s*\/?>/gi, '<br/>');
   cleaned = cleaned.replace(/(<br\/>\s*){3,}/gi, '<br/><br/>');
-
-  cleaned = cleaned.trim();
-  while (cleaned.startsWith('<br/>')) {
-    cleaned = cleaned.substring(5).trim();
-  }
-  while (cleaned.endsWith('<br/>')) {
-    cleaned = cleaned.substring(0, cleaned.length - 5).trim();
-  }
-
-  return cleaned;
+  return cleaned.trim().replace(/^(<br\/>\s*)+|(\s*<br\/>)+$/gi, '').trim();
 }
 
 

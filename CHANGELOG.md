@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.6] - 2026-09-08
+
+### Security & Hardening
+- **Reverse Tabnabbing Protection**: Added `rel="noopener noreferrer"` to external volume download buttons in [main.js](file:///d:/Download/novel-scrape/main.js).
+- **Content Security Policy**: Added strict CSP `<meta>` tag to [index.html](file:///d:/Download/novel-scrape/index.html) restricting script, style, font, and connect origins.
+- **Dependency Vulnerability Fixes**: Resolved high-severity CVEs in transitive devDependencies (`nanoid` and `postcss`) via `npm audit fix`.
+
+### Performance & Simplification
+- **QR Scanner Canvas Reuse**: Reused a single offscreen canvas with `willReadFrequently: true` in `scanTick()` to eliminate 60 allocations/sec during camera scanning.
+- **Search Prefix Set Hoisting**: Hoisted `RECOGNIZED_PREFIXES` to a module-level constant in [main.js](file:///d:/Download/novel-scrape/main.js) to avoid re-instantiation per search keystroke.
+- **Tag Reset Deduplication**: Refactored `resetAllFilters()` to reuse `clearAllTags(false)`.
+- **Dead Code & Script Cleanup**: Removed unused `excludedTagsRaw`, removed redundant `clean-backups.js` script and npm commands, and removed root fixture `new-data.json`.
+- **Streamlined Utilities**: Shrunk `diffSnippet` in [scripts/utils.js](file:///d:/Download/novel-scrape/scripts/utils.js) to concise template string and generated `VALID_TAGS_MAP` via `Object.fromEntries`.
+- **Syntax Simplifications**: Inlined synopsis `<br/>` trimming regex in [scripts/clean-data.js](file:///d:/Download/novel-scrape/scripts/clean-data.js), eliminated redundant `syncTimeout = 'LOCKED'` locking hack, and removed pass-through wrapper `escapeAttr`.
+- **HTML Semantics**: Replaced inline `style="display: none;"` on `#qrFileInput` with the standard `hidden` attribute in [index.html](file:///d:/Download/novel-scrape/index.html).
+
 ## [1.0.5] - 2026-09-08
 
 ### Added
