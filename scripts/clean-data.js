@@ -14,7 +14,7 @@ const cacheFileFlagIdx = args.indexOf('--cache-file');
 const CACHE_PATH = (cacheFileFlagIdx !== -1 && args[cacheFileFlagIdx + 1])
   ? path.resolve(args[cacheFileFlagIdx + 1])
   : path.resolve(__dirname, '../public/link-cache.json');
-const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const CACHE_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
 // Support custom database path if passed as an argument ending in .json
 const jsonArg = args.find(arg => arg.endsWith('.json') && !arg.startsWith('--'));

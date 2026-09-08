@@ -31,6 +31,7 @@ A sleek, dark-themed static web app for browsing and downloading a personal ligh
   - [ADR-002: Zero-Knowledge AES-GCM Encryption with Supabase Sync](file:///d:/Download/novel-scrape/docs/decisions/0002-zero-knowledge-aes-gcm-supabase-sync.md)
   - [ADR-003: Id-Keyed Progress Tracking Schema](file:///d:/Download/novel-scrape/docs/decisions/0003-id-keyed-progress-tracking-schema.md)
   - [ADR-004: Genre Schema Normalization & Multi-Source Sync Pipeline](file:///d:/Download/novel-scrape/docs/decisions/0004-genre-schema-and-multi-source-sync.md)
+  - [ADR-005: Branding Identity, Source Attribution & 90-Day Link Caching](file:///d:/Download/novel-scrape/docs/decisions/0005-branding-identity-and-long-term-link-caching.md)
 - [Changelog](file:///d:/Download/novel-scrape/CHANGELOG.md) — Semantic versioning and version history.
 - [Contributing Guide](file:///d:/Download/novel-scrape/CONTRIBUTING.md) — Branching, conventional commits, and verification workflow.
 

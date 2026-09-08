@@ -1,26 +1,31 @@
-# Task List: Repository Cleanup & Code Simplification
+# Task List: Branding Icon, Footer Source Attribution & 90-Day Cache TTL
 
-- [ ] Task 1: Delete leftover `scraping_log.txt` and `scratch_processed_urls.json`
-  - Acceptance: `scraping_log.txt` and `scratch_processed_urls.json` are deleted from workspace.
-  - Verification: `git status` shows files removed.
-  - Files: `scraping_log.txt`, `scratch_processed_urls.json`
+- [x] Task 1: Update cache TTL to 90 days in `scripts/utils.js`, `scripts/clean-data.js`, `scripts/sync-novels.js`, and `scripts/sync-animestuff.js`
+  - Acceptance: `CACHE_EXPIRY_MS` and default parameter in `isUrlCachedAndValid` use `90 * 24 * 60 * 60 * 1000` (90 days).
+  - Verification: Grep for `CACHE_EXPIRY_MS` across `scripts/` to confirm all are 90 days.
+  - Files: `scripts/utils.js`, `scripts/clean-data.js`, `scripts/sync-novels.js`, `scripts/sync-animestuff.js`
 
-- [ ] Task 2: Create task tracking documents in `tasks/`
-  - Acceptance: `tasks/plan.md` and `tasks/todo.md` accurately document current tasks.
-  - Verification: View files in `tasks/`.
-  - Files: `tasks/plan.md`, `tasks/todo.md`
+- [x] Task 2: Update unit test assertions in `scripts/utils.test.js` to match 90-day TTL
+  - Acceptance: Expiry test assertions test 90-day expiration window (`NINETY_DAYS_MS`).
+  - Verification: Run `node scripts/utils.test.js`.
+  - Files: `scripts/utils.test.js`
 
-- [ ] Task 3: Add legacy flag pruning to `scripts/clean-data.js` and execute clean write
-  - Acceptance: Legacy flags (`recommended`, `newUpdate`, `addToFav`) are removed from entries in `public/data.json`; backup is created in `backup/`.
-  - Verification: Check `public/data.json` entry keys; run `node scripts/clean-data.test.js`.
-  - Files: `scripts/clean-data.js`, `public/data.json`
+- [x] Task 3: Create modern SVG book icon in `public/icon.svg`
+  - Acceptance: Clean, aesthetic vector graphic representing an illuminated novel/book suitable as a favicon and brand mark.
+  - Verification: File exists, valid SVG syntax.
+  - Files: `public/icon.svg`
 
-- [ ] Task 4: Centralize shared normalization helpers in `scripts/utils.js` and refactor `scripts/sync-animestuff.js`
-  - Acceptance: Shared functions in `scripts/sync-animestuff.js` import from `scripts/utils.js` without code duplication.
-  - Verification: Run `npm run sync:animestuff` dry-run.
-  - Files: `scripts/utils.js`, `scripts/sync-animestuff.js`
+- [x] Task 4: Link favicon in `<head>` and brand icon in `<header>` of `index.html`
+  - Acceptance: `<link rel="icon" type="image/svg+xml" href="/icon.svg">` is in `<head>`, and icon is integrated with `<h1>Novel Search</h1>`.
+  - Verification: Inspect `index.html` markup and styling.
+  - Files: `index.html`, `style.css`
 
-- [ ] Task 5: Run full project verification
-  - Acceptance: Vite build compiles without error, test suite passes cleanly.
-  - Verification: `npm run build` and `node scripts/clean-data.test.js`.
-  - Files: Entire repository
+- [x] Task 5: Add source attribution footer in `index.html` and style in `style.css`
+  - Acceptance: Footer links to `https://esnovels.github.io/EsNovels1/index.html` and `https://animestuff.me/` with safe attributes (`target="_blank" rel="noopener noreferrer"`), styled with theme CSS variables.
+  - Verification: Inspect `index.html` and `style.css`.
+  - Files: `index.html`, `style.css`
+
+- [x] Task 6: Run full verification suite and update documentation
+  - Acceptance: `node scripts/utils.test.js`, `node scripts/clean-data.test.js`, and `npm run build` pass; `CHANGELOG.md` updated.
+  - Verification: Run commands in shell.
+  - Files: `CHANGELOG.md`

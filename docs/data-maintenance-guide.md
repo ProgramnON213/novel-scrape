@@ -8,7 +8,7 @@ This guide covers database maintenance, data cleansing, sync operations, and com
 
 - **Primary Database**: [`public/data.json`](file:///d:/Download/novel-scrape/public/data.json) — Served statically by Vite and read by `main.js`.
 - **Backups Directory**: `backup/` — Automatic timestamped snapshots (`data-backup-YYYY-MM-DD-THH-MM-SS.json`) created before any write operation.
-- **Link Verification Cache**: [`public/link-cache.json`](file:///d:/Download/novel-scrape/public/link-cache.json) — 7-day TTL cache for network-checked cover image URLs and source page links.
+- **Link Verification Cache**: [`public/link-cache.json`](file:///d:/Download/novel-scrape/public/link-cache.json) — 90-day TTL cache for network-checked cover image URLs and source page links.
 
 ---
 

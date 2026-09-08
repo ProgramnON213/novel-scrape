@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.5] - 2026-09-08
+
+### Added
+- **Branding Icon & Favicon**: Added vector SVG branding emblem (`public/icon.svg`) linked as the browser tab favicon and rendered in the application header alongside "Novel Search".
+- **Source Attribution Footer**: Added a semantic, theme-responsive footer linking directly to library sources ([EsNovels](https://esnovels.github.io/EsNovels1/index.html) and [Animestuff](https://animestuff.me/)).
+
+### Changed
+- **90-Day Link Validation Cache TTL**: Extended link validation cache expiry from 7 days to 90 days across `scripts/utils.js`, `scripts/clean-data.js`, `scripts/sync-novels.js`, and `scripts/sync-animestuff.js`, preventing redundant network checks during frequent data maintenance.
+
 ## [1.0.4] - 2026-08-02
 
 ### Fixed

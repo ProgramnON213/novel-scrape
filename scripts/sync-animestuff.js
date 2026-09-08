@@ -21,7 +21,7 @@ const MAIN_DB_PATH = path.resolve(__dirname, '../public/data.json');
 const BACKUP_DIR   = path.resolve(__dirname, '../backup');
 const REMOTE_DATA_URL = 'https://animestuff.me/novels.json';
 const CACHE_PATH   = path.resolve(__dirname, '../public/link-cache.json');
-const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const CACHE_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
 // ---------------------------------------------------------------------------
 // CLI

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Novel Search</title>
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -12,7 +13,10 @@
 <body>
   <header>
     <div class="header-top">
-      <h1>Novel Search</h1>
+      <div class="header-brand" id="headerBrand" title="Novel Search — Click to reset filters">
+        <img src="/icon.svg" alt="Novel Search logo" class="brand-icon" width="40" height="40">
+        <h1>Novel Search</h1>
+      </div>
       <div class="header-controls">
         <!-- Theme Switcher -->
         <div class="theme-switcher" title="Switch theme">
@@ -74,6 +78,17 @@
   <main>
     <div id="novelGrid" class="novel-grid"></div>
   </main>
+
+  <footer class="app-footer">
+    <div class="footer-content">
+      <p class="footer-attribution">
+        Novels sourced from
+        <a href="https://esnovels.github.io/EsNovels1/index.html" target="_blank" rel="noopener noreferrer" class="footer-link">EsNovels</a>
+        <span class="footer-divider" aria-hidden="true">&bull;</span>
+        <a href="https://animestuff.me/" target="_blank" rel="noopener noreferrer" class="footer-link">Animestuff</a>
+      </p>
+    </div>
+  </footer>
 
   <div id="novelModal" class="modal">
     <div class="modal-content glass">

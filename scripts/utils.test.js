@@ -49,15 +49,17 @@ test('Link Cache Utilities (utils.js)', async (t) => {
 
   await t.test('isUrlCachedAndValid - checks URL cache TTL correctly', () => {
     const now = Date.now();
-    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
     
     const mockCache = {
       'https://example.com/recent.jpg': now - (1000 * 60 * 60), // 1 hour ago
-      'https://example.com/expired.jpg': now - (SEVEN_DAYS_MS + 1000), // 7 days + 1 second ago
+      'https://example.com/sixty-days-old.jpg': now - (60 * 24 * 60 * 60 * 1000), // 60 days ago
+      'https://example.com/expired.jpg': now - (NINETY_DAYS_MS + 1000), // 90 days + 1 second ago
     };
 
     // Valid inputs
     assert.strictEqual(isUrlCachedAndValid('https://example.com/recent.jpg', mockCache), true, 'Recent URL should be valid');
+    assert.strictEqual(isUrlCachedAndValid('https://example.com/sixty-days-old.jpg', mockCache), true, '60-day old URL should be valid under 90-day TTL');
     assert.strictEqual(isUrlCachedAndValid('https://example.com/expired.jpg', mockCache), false, 'Expired URL should be invalid');
     assert.strictEqual(isUrlCachedAndValid('https://example.com/uncached.jpg', mockCache), false, 'Uncached URL should be invalid');
 

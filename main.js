@@ -68,7 +68,7 @@ const syncModal       = document.getElementById('syncModal');
 const syncModalBody   = document.getElementById('syncModalBody');
 const syncCloseBtn    = document.getElementById('syncCloseBtn');
 const qrFileInput     = document.getElementById('qrFileInput');
-const siteTitle       = document.querySelector('header h1');
+const siteTitle       = document.querySelector('.header-brand') || document.querySelector('header h1');
 
 /* ============================================================
    SETTINGS — LOAD / SAVE / DEFAULTS

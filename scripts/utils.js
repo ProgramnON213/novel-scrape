@@ -226,7 +226,9 @@ export function saveLinkCache(cachePath, linkCache) {
   }
 }
 
-export function isUrlCachedAndValid(url, linkCache, expiryMs = 7 * 24 * 60 * 60 * 1000) {
+export const CACHE_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+export function isUrlCachedAndValid(url, linkCache, expiryMs = CACHE_EXPIRY_MS) {
   if (!url || !linkCache) return false;
   const cachedTime = linkCache[url];
   if (!cachedTime) return false;

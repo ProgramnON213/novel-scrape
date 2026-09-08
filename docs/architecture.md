@@ -47,10 +47,11 @@ This document provides a technical map of the **Novel Search** architecture, com
 
 | File | Purpose | Single-File Constraint |
 |---|---|---|
-| [`index.html`](file:///d:/Download/novel-scrape/index.html) | HTML shell, modal skeletons, search input, tag container, grid container | Must remain clean semantic HTML |
+| [`index.html`](file:///d:/Download/novel-scrape/index.html) | HTML shell, header branding, modal skeletons, search input, tag/grid containers, source attribution footer | Must remain clean semantic HTML |
 | [`main.js`](file:///d:/Download/novel-scrape/main.js) | Complete application logic module (state, filters, modal, storage, sync) | **Strict single-file frontend module**. Do not split into sub-files without ADR |
-| [`style.css`](file:///d:/Download/novel-scrape/style.css) | Custom CSS variables, themes (`:root`, `.theme-sakura`, `.theme-cyberpunk`), grid, modal, glassmorphism | **Vanilla CSS only**. No Tailwind or utility-first preprocessors |
+| [`style.css`](file:///d:/Download/novel-scrape/style.css) | Custom CSS variables, themes (`:root`, `.theme-sakura`, `.theme-cyberpunk`), brand icon, footer, glassmorphism | **Vanilla CSS only**. No Tailwind or utility-first preprocessors |
 | [`public/data.json`](file:///d:/Download/novel-scrape/public/data.json) | Static novel catalogue array served verbatim by Vite | Modifiable via sync/cleansing scripts |
+| [`public/icon.svg`](file:///d:/Download/novel-scrape/public/icon.svg) | Vector SVG novel emblem for browser favicon and header branding | Scalable vector graphic asset |
 
 ---
 

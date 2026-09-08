@@ -231,7 +231,7 @@ npm run clean -- --check-links
 npm run clean:write -- --check-links
 ```
 
-* **Caching**: Checked URLs are cached locally in `public/link-cache.json` with a 7-day expiration. Verified links are skipped in subsequent runs (across both the sync and cleansing scripts) to eliminate redundant network traffic.
+* **Caching**: Checked URLs are cached locally in `public/link-cache.json` with a 90-day expiration. Verified links are skipped in subsequent runs (across both the sync and cleansing scripts) to eliminate redundant network traffic.
 * **Duplicate sourceUrl Inheritance**: When duplicate records are detected and merged, if the surviving entry lacks a `sourceUrl` but a discarded duplicate has one, the survivor inherits it. This inherited URL is then naturally verified and cached in the validation phase.
 
 ---

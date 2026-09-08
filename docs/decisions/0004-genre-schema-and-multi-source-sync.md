@@ -25,9 +25,9 @@ We implement a **Standardized Cleansing, Link Verification, and Backup Sync Pipe
    - `newUpdate: "yes"` flags are appended to modified records so the UI highlights updated titles.
 3. **Automated Database Backups**:
    - Every execution of `clean-data.js --write` or `sync-novels.js --merge` automatically writes a timestamped snapshot of `public/data.json` to `backup/data-backup-YYYY-MM-DD-THH-MM-SS.json`.
-4. **Shared Link Cache with 7-Day Expiration**:
+4. **Shared Link Cache with Long-Term Expiration**:
    - Network verification (`--check-links`) caches tested HTTP HEAD/GET responses in `public/link-cache.json`.
-   - Verified valid links are cached for 7 days, eliminating redundant network traffic across CLI executions.
+   - Verified valid links are cached (initially 7 days, updated to **90 days** in [ADR-005](0005-branding-identity-and-long-term-link-caching.md)), eliminating redundant network traffic across CLI executions.
 
 ## Alternatives Considered
 
