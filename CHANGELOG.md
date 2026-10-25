@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.7] - 2026-10-25
+
+### Security & Hardening
+- **Private Credential Isolation in Exports**: `exportBackup()` in [main.js](file:///d:/Download/novel-scrape/main.js) now exports only user library preferences and volume progress, keeping `syncKey` and custom Supabase credentials private.
+- **Infinite Error Loop & Offline Resilience**: Added `dataset.fallbackApplied` re-entrancy guards and inline SVG data URI fallback for broken cover images, preventing browser tab freezes and ensuring 100% offline cover display.
+- **URL Sanitization & Unicode Preservation**: Fixed regex in `sanitizeUrl()` to strip only ASCII control characters (`[\x00-\x1F\x7F]`) instead of non-ASCII characters (`[^\x20-\x7E]`), preserving valid international and accented unicode URLs.
+- **Attribute Escaping & ID Boundary Validation**: Enforced attribute escaping on `data-novel-id` in modal buttons and validated ID format in `setLibEntry` and `setProgress`.
+- **Cryptographic Key Entropy**: Upgraded `generateRandomKey()` from 8 bytes (64-bit) to 16 bytes (128-bit) cryptographic entropy.
+- **Dependency Audit Resolution**: Resolved high-severity CVEs in `vite` and `source-map-js` via `npm audit fix`.
+
+### Bug Fixes & Sync Integrity
+- **Timestamped Progress Tracking & Cloud Unmarking**: Upgraded `settings.progress` to include `updatedAt` timestamps per [ADR-003](file:///d:/Download/novel-scrape/docs/decisions/0003-id-keyed-progress-tracking-schema.md), allowing unchecked volumes to sync cleanly across devices without being revived by set unions.
+- **Unicode-Aware Duplicate Matching**: Switched `normalizeString()` in [scripts/utils.js](file:///d:/Download/novel-scrape/scripts/utils.js) to Unicode punctuation stripping (`[\p{P}\p{S}\s]`), preventing non-Latin titles sharing short prefixes from false duplicate deletion.
+- **Empty Normalized Title Collision Prevention**: Guarded against empty normalized strings in `normalizedTitleMap` in [scripts/sync-novels.js](file:///d:/Download/novel-scrape/scripts/sync-novels.js) and [scripts/sync-animestuff.js](file:///d:/Download/novel-scrape/scripts/sync-animestuff.js).
+- **Volume Title Matching Fallback**: Added fallback to exact trimmed comparison if volume title normalization is empty, preventing link overwrites between non-ASCII volumes.
+- **Dead Schema Flag Elimination**: Removed `newUpdate: 'yes'` from sync scripts to prevent schema conflicts with [scripts/clean-data.js](file:///d:/Download/novel-scrape/scripts/clean-data.js).
+- **Package Manifest Cleanup**: Removed non-existent `"main": "index.js"` from [package.json](file:///d:/Download/novel-scrape/package.json).
+
+### Performance & Simplification
+- **Zero-Allocation Genre Filtering**: Pre-parsed `novel._genresList` during `init()` to eliminate 1,000+ string splits and array allocations on every search keystroke.
+- **Quoted Search Term Resolution**: Fixed default title search to match unquoted search values, enabling exact phrase queries (e.g. `"Solo Leveling"`).
+- **Chunked Base64 Conversion**: Optimized `arrayBufferToBase64()` to process 32KB chunks, avoiding quadratic string memory reallocations during zero-knowledge sync.
+- **Tag State Mapping**: Simplified `cycleTagState()` using declarative object lookup (`NEXT_TAG_STATE`) instead of nested ternaries.
+- **Stream Cleanup**: Auto-canceled response stream body on GET fallback in `checkUrlExists()` to free network sockets immediately.
+
+### Documentation & Architecture
+- **ADR-006 Adoption**: Documented Unicode-aware sync normalization, offline progress tracking, and credential isolation in [ADR-006](file:///d:/Download/novel-scrape/docs/decisions/0006-unicode-sync-offline-progress-credential-isolation.md).
+- **Architecture & Guides**: Updated [Architecture Guide](file:///d:/Download/novel-scrape/docs/architecture.md), [User Guide](file:///d:/Download/novel-scrape/docs/user-guide.md), and [README.md](file:///d:/Download/novel-scrape/README.md) reflecting new security, offline resilience, and ADR index.
+
 ## [1.0.6] - 2026-09-08
 
 ### Security & Hardening

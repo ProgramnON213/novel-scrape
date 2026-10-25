@@ -68,13 +68,31 @@ This document provides a technical map of the **Novel Search** architecture, com
 5. **Camera Frame Downscaling**:
    - The QR code scanner downscales camera video frames (max width 600px) on an offscreen canvas before invoking `jsQR`, preventing UI stutter during scanning.
 
+6. **Chunked Base64 Encoding**:
+   - Cryptographic payload conversion in `arrayBufferToBase64()` processes buffers in 32KB chunks, preventing JavaScript call-stack overflows on large library sync states.
+7. **Pre-Parsed Search & Volume Attributes**:
+   - `_genresList` array and `_volumesCountInt` integer are computed on initialization, speeding up search and card render cycles.
+
 ---
 
 ## 🔒 Security & Privacy Architecture
 
 - **HTML Sanitization**: All user-facing text strings are sanitized via `escapeHTML()` and `escapeSynopsis()` before DOM injection.
-- **Link Sanitization**: Download and source links are checked against harmful protocols (`javascript:`, `data:`, `vbscript:`) and stripped of non-printable control characters.
+- **Link Sanitization**: Download and source links are checked against harmful protocols (`javascript:`, `data:`, `vbscript:`) and stripped of non-printable control characters (`/[\x00-\x1F\x7F]/g`).
+- **Credential Isolation**: Local backup export (`exportBackup()`) explicitly excludes sensitive sync secrets (`syncKey`, `customSupabaseUrl`, `customSupabaseAnonKey`), preventing credential leaks when exporting portable library JSON.
+- **Offline Cover Protection**: Image fallbacks use an inline SVG data URI with a `dataset.fallbackApplied` re-entrancy guard, eliminating external network dependencies and preventing infinite error loops.
+- **Timestamped Progress Reconcilation**: Volume reading tracking uses `{ readVolumes, updatedAt }` records to resolve multi-device sync deterministically, allowing users to unmark volumes without cloud overwrite collisions.
 - **Zero-Knowledge Cryptography**:
   - SHA-256 key hashing derives the lookup ID (`lookup_id`) for cloud storage.
   - AES-GCM 256-bit encryption encrypts all local library settings prior to network transport.
   - Supabase table access is revoked (`REVOKE SELECT, INSERT, UPDATE, DELETE`); communication is isolated to `SECURITY DEFINER` RPC functions (`get_sync_data`, `set_sync_data`).
+
+---
+
+## 📑 Architecture Decision Records (ADRs)
+- [ADR-001: Framework-less Single Module Architecture](file:///d:/Download/novel-scrape/docs/decisions/0001-frameworkless-single-module-architecture.md)
+- [ADR-002: Zero-Knowledge AES-GCM Encryption with Supabase Sync](file:///d:/Download/novel-scrape/docs/decisions/0002-zero-knowledge-aes-gcm-supabase-sync.md)
+- [ADR-003: Id-Keyed Progress Tracking Schema](file:///d:/Download/novel-scrape/docs/decisions/0003-id-keyed-progress-tracking-schema.md)
+- [ADR-004: Genre Schema Normalization & Multi-Source Sync Pipeline](file:///d:/Download/novel-scrape/docs/decisions/0004-genre-schema-and-multi-source-sync.md)
+- [ADR-005: Branding Identity, Source Attribution & 90-Day Link Caching](file:///d:/Download/novel-scrape/docs/decisions/0005-branding-identity-and-long-term-link-caching.md)
+- [ADR-006: Unicode-Aware Sync Normalization, Offline Progress Tracking, and Credential Isolation](file:///d:/Download/novel-scrape/docs/decisions/0006-unicode-sync-offline-progress-credential-isolation.md)

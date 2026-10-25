@@ -47,7 +47,7 @@ export const VALID_TAGS_MAP = Object.fromEntries(
 );
 
 export function normalizeString(str) {
-  return str ? str.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  return str ? str.toLowerCase().replace(/[\p{P}\p{S}\s]+/gu, '') : '';
 }
 
 export function normalizeGenres(genreStr) {
@@ -113,6 +113,9 @@ export async function checkUrlExists(url) {
     const getId = setTimeout(() => getController.abort(), 5000);
     const getResponse = await fetch(url, { method: 'GET', signal: getController.signal });
     clearTimeout(getId);
+    if (getResponse.body && typeof getResponse.body.cancel === 'function') {
+      getResponse.body.cancel().catch(() => {});
+    }
     return getResponse.ok;
   } catch (e) {
     return false;

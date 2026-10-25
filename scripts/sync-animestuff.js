@@ -129,7 +129,10 @@ async function run() {
   mainDb.forEach((n, idx) => {
     if (n.title) {
       exactTitlesMap.set(n.title.trim(), idx);
-      normalizedTitlesMap.set(normalizeString(n.title), idx);
+      const norm = normalizeString(n.title);
+      if (norm) {
+        normalizedTitlesMap.set(norm, idx);
+      }
     }
   });
 
@@ -158,12 +161,13 @@ async function run() {
 
     // Check if already in DB by normalized title or exact title
     const hasExact      = exactTitlesMap.has(entry.title);
-    const hasNormalized = normalizedTitlesMap.has(normalizeString(entry.title));
+    const norm          = normalizeString(entry.title);
+    const hasNormalized = !!(norm && normalizedTitlesMap.has(norm));
 
     if (hasExact || hasNormalized) {
       const existingIdx = hasExact 
         ? exactTitlesMap.get(entry.title) 
-        : normalizedTitlesMap.get(normalizeString(entry.title));
+        : normalizedTitlesMap.get(norm);
       
       const existingNovel = mainDb[existingIdx];
       const incomingSourceUrl = entry.sourceUrl;
@@ -315,8 +319,7 @@ async function run() {
       updatedDb[u.index] = {
         ...updatedDb[u.index],
         ...(u.newUrl ? { sourceUrl: u.newUrl } : {}),
-        ...(u.newCover ? { cover: u.newCover } : {}),
-        newUpdate: 'yes'
+        ...(u.newCover ? { cover: u.newCover } : {})
       };
     }
 
@@ -325,8 +328,7 @@ async function run() {
     for (const n of newNovels) {
       updatedDb.unshift({
         ...n,
-        id:        formatId(nextIdVal++),
-        newUpdate: 'yes',
+        id:        formatId(nextIdVal++)
       });
     }
 

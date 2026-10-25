@@ -32,6 +32,7 @@ A sleek, dark-themed static web app for browsing and downloading a personal ligh
   - [ADR-003: Id-Keyed Progress Tracking Schema](file:///d:/Download/novel-scrape/docs/decisions/0003-id-keyed-progress-tracking-schema.md)
   - [ADR-004: Genre Schema Normalization & Multi-Source Sync Pipeline](file:///d:/Download/novel-scrape/docs/decisions/0004-genre-schema-and-multi-source-sync.md)
   - [ADR-005: Branding Identity, Source Attribution & 90-Day Link Caching](file:///d:/Download/novel-scrape/docs/decisions/0005-branding-identity-and-long-term-link-caching.md)
+  - [ADR-006: Unicode-Aware Sync Normalization, Offline Progress Tracking, and Credential Isolation](file:///d:/Download/novel-scrape/docs/decisions/0006-unicode-sync-offline-progress-credential-isolation.md)
 - [Changelog](file:///d:/Download/novel-scrape/CHANGELOG.md) — Semantic versioning and version history.
 - [Contributing Guide](file:///d:/Download/novel-scrape/CONTRIBUTING.md) — Branching, conventional commits, and verification workflow.
 
@@ -45,7 +46,7 @@ A sleek, dark-themed static web app for browsing and downloading a personal ligh
 
 ## Boundaries & Constraints
 - **Zero-Knowledge Privacy**: Decryption keys (`syncKey`) stay on the client device and are never sent to Supabase. Keep payload encryption/decryption robust.
-- **No Cover fallback**: If a cover is missing or fails to load, track it in `settings.brokenCovers` and show the `https://placehold.co/...` placeholder.
+- **No Cover fallback**: If a cover is missing or fails to load, track it in `settings.brokenCovers` and show the self-contained inline SVG placeholder.
 - **Environment variables**: Use `import.meta.env.VITE_SUPABASE_URL` and `import.meta.env.VITE_SUPABASE_ANON_KEY`.
 
 ## Example Snippet (Event Handling & Settings Update)

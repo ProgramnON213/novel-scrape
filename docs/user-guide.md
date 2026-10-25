@@ -59,8 +59,8 @@ Sync your reading progress, favorites, and volume checkmarks across your devices
 
 ## 💾 Local Backups
 
-- **Export Backup**: Click **Export Backup** in the header to download a timestamped `.json` file containing all your favorites, library statuses, volume progress, and active theme settings.
-- **Import Backup**: Click **Import Backup** to restore your library state on any computer or browser.
+- **Export Backup**: Click **Export Backup** in the header to download a timestamped `.json` file containing all your favorites, library statuses, volume progress, and active theme settings. Sensitive cloud sync credentials (such as your Sync Key and custom Supabase settings) are automatically excluded for privacy.
+- **Import Backup**: Click **Import Backup** to restore your library state on any computer or browser without overwriting your active cloud sync credentials.
 - Data is stored locally in `localStorage` under key `novel_settings` and keyed by `novel.id`.
 
 ---

@@ -1,8 +1,7 @@
 {
   "name": "novel-scrape",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "",
-  "main": "index.js",
   "scripts": {
     "cli": "node scripts/cli.js",
     "dev": "vite",

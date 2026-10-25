@@ -9,6 +9,12 @@ const READING_STATUS_OPTIONS = ['', 'Reading', 'Plan to Read', 'Completed', 'Dro
 const THEMES = ['theme-midnight', 'theme-sakura', 'theme-cyberpunk'];
 const DEFAULT_LIB_ENTRY = { favorite: false, status: '' };
 const EMPTY_ARRAY = [];
+const NEXT_TAG_STATE = {
+  neutral: 'include',
+  include: 'exclude',
+  exclude: 'neutral'
+};
+const NO_COVER_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='400' viewBox='0 0 300 400'%3E%3Crect width='300' height='400' fill='%231a1a2e'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23a0aab2' font-family='sans-serif' font-size='20'%3ENo Cover%3C/text%3E%3C/svg%3E";
 const RECOGNIZED_PREFIXES = new Set([
   'a', 'author', 'authors',
   'art', 'artist',
@@ -116,11 +122,19 @@ function sanitizeLibrary(rawLibrary) {
 function sanitizeProgress(rawProgress) {
   const clean = {};
   if (rawProgress && typeof rawProgress === 'object') {
-    for (const [id, arr] of Object.entries(rawProgress)) {
+    for (const [id, val] of Object.entries(rawProgress)) {
       if (id === '__proto__' || id === 'constructor' || id === 'prototype') continue;
       if (!/^[a-zA-Z0-9_\-]+$/.test(id)) continue;
-      if (Array.isArray(arr)) {
-        clean[id] = arr.filter(item => typeof item === 'string');
+      if (Array.isArray(val)) {
+        clean[id] = {
+          readVolumes: val.filter(item => typeof item === 'string'),
+          updatedAt: 0
+        };
+      } else if (val && typeof val === 'object' && Array.isArray(val.readVolumes)) {
+        clean[id] = {
+          readVolumes: val.readVolumes.filter(item => typeof item === 'string'),
+          updatedAt: Number(val.updatedAt) || 0
+        };
       }
     }
   }
@@ -204,6 +218,10 @@ async function init() {
       novel._synopsisLower = novel.synopsis ? novel.synopsis.toLowerCase() : '';
       novel._genreLower = novel.genre ? novel.genre.toLowerCase() : '';
       novel._tgLower = novel.translationGroup ? novel.translationGroup.toLowerCase() : '';
+      novel._genresList = novel.genre
+        ? novel.genre.split(',').map(g => g.trim().toLowerCase()).filter(Boolean)
+        : EMPTY_ARRAY;
+      novel._volumesCountInt = parseInt(novel.volumesCount, 10) || (novel.volumes ? novel.volumes.length : 0);
     });
 
     buildTagSystem();
@@ -253,8 +271,8 @@ function buildTagSystem() {
 }
 
 function cycleTagState(tag, pill) {
-  const current = tagStates[tag];
-  const next = current === 'neutral' ? 'include' : current === 'include' ? 'exclude' : 'neutral';
+  const current = tagStates[tag] || 'neutral';
+  const next = NEXT_TAG_STATE[current] || 'neutral';
   tagStates[tag] = next;
   pill.dataset.state = next;
   updateCachedTags();
@@ -315,6 +333,7 @@ function getLibEntry(novelId) {
 }
 
 function setLibEntry(novelId, patch) {
+  if (!novelId || !/^[a-zA-Z0-9_\-]+$/.test(novelId)) return;
   const current = getLibEntry(novelId);
   const updatedPatch = { ...patch };
   if ('favorite' in patch && patch.favorite !== current.favorite) {
@@ -328,11 +347,21 @@ function setLibEntry(novelId, patch) {
 }
 
 function getProgress(novelId) {
-  return settings.progress[novelId] || [];
+  const p = settings.progress[novelId];
+  if (Array.isArray(p)) return p;
+  if (p && Array.isArray(p.readVolumes)) return p.readVolumes;
+  return EMPTY_ARRAY;
 }
 
 function setProgress(novelId, readTitles) {
-  settings.progress[novelId] = readTitles;
+  if (!novelId || !/^[a-zA-Z0-9_\-]+$/.test(novelId)) return;
+  const list = Array.isArray(readTitles)
+    ? readTitles.filter(t => typeof t === 'string')
+    : [];
+  settings.progress[novelId] = {
+    readVolumes: list,
+    updatedAt: Date.now()
+  };
   saveSettings();
 }
 
@@ -346,7 +375,7 @@ function parseSearchQuery(query) {
   while ((match = regex.exec(query)) !== null) {
     let prefix = match[1] ? match[1].slice(0, -1).toLowerCase() : null;
     let value = match[2].toLowerCase();
-    const raw = match[0];
+    const raw = match[0].toLowerCase();
 
     // Strip quotes
     if (value.startsWith('"') && value.endsWith('"')) {
@@ -416,8 +445,9 @@ function applyFilters() {
           }
         } else {
           // Default search on unrecognized/null prefix (Title & Alternative Title)
-          const rawMatch = token.raw.toLowerCase();
-          return novel._titleLower.includes(rawMatch) || novel._alternativeLower.includes(rawMatch);
+          // Strip quotes from value for exact matching; use raw text if an unrecognized prefix was provided
+          const term = pref ? token.raw : val;
+          return novel._titleLower.includes(term) || novel._alternativeLower.includes(term);
         }
         return false;
       });
@@ -426,10 +456,7 @@ function applyFilters() {
 
     // Tag filters
     if (cachedIncludedTags.length > 0 || cachedExcludedTags.length > 0) {
-      const novelGenres = novel.genre
-        ? novel.genre.split(',').map(g => g.trim().toLowerCase())
-        : EMPTY_ARRAY;
-
+      const novelGenres = novel._genresList;
       if (cachedIncludedTags.length > 0 && !cachedIncludedTags.every(tag => novelGenres.includes(tag))) return false;
       if (cachedExcludedTags.length > 0 && cachedExcludedTags.some(tag => novelGenres.includes(tag))) return false;
     }
@@ -504,7 +531,7 @@ function appendNextPage() {
       <img src="${sanitizeUrl(novel.cover)}" alt="Cover of ${escapeHTML(novel.title)}" class="novel-cover-img" loading="lazy" width="200" height="280">
       <div class="novel-title">${escapeHTML(novel.title)}</div>
       <div class="novel-meta">
-        <span>Vols: ${novel.volumesCount || 0}</span>
+        <span>Vols: ${escapeHTML(novel._volumesCountInt ?? novel.volumesCount ?? 0)}</span>
         ${progressText}
         <span class="status-badge">${escapeHTML(novel.status || 'Unknown')}</span>
       </div>
@@ -516,6 +543,9 @@ function appendNextPage() {
   // Remove existing sentinel if present
   const oldSentinel = document.getElementById('gridSentinel');
   if (oldSentinel) {
+    if (intersectionObserver) {
+      intersectionObserver.unobserve(oldSentinel);
+    }
     oldSentinel.remove();
   }
 
@@ -546,7 +576,7 @@ function renderGrid(novels) {
 
   // --- results summary ---
   const totalTiles   = novels.length;
-  const totalVolumes = novels.reduce((sum, n) => sum + (parseInt(n.volumesCount, 10) || 0), 0);
+  const totalVolumes = novels.reduce((sum, n) => sum + (n._volumesCountInt !== undefined ? n._volumesCountInt : (parseInt(n.volumesCount, 10) || 0)), 0);
   if (totalTiles === 0) {
     resultsSummary.textContent = '';
   } else {
@@ -670,11 +700,11 @@ function openModal(novel) {
         <div class="user-library-controls">
           <span class="section-label">My Library</span>
           <div class="favorite-row">
-            <button class="fav-toggle-btn${entry.favorite ? ' active' : ''}" id="favToggleBtn" data-novel-id="${novel.id}">
+            <button class="fav-toggle-btn${entry.favorite ? ' active' : ''}" id="favToggleBtn" data-novel-id="${escapeHTML(novel.id)}">
               ${entry.favorite ? '❤️ Favorited' : '🤍 Add to Favorites'}
             </button>
           </div>
-          <select class="status-select" id="readingStatusSelect" data-novel-id="${novel.id}">
+          <select class="status-select" id="readingStatusSelect" data-novel-id="${escapeHTML(novel.id)}">
             ${statusOptions}
           </select>
         </div>
@@ -742,7 +772,15 @@ function closeModal() {
    IMPORT / EXPORT
    ============================================================ */
 function exportBackup() {
-  const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+  const exportPayload = {
+    version: settings.version,
+    library: settings.library,
+    progress: settings.progress,
+    theme: settings.theme,
+    hideNoCover: settings.hideNoCover,
+    brokenCovers: settings.brokenCovers
+  };
+  const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -824,8 +862,8 @@ function escapeSynopsis(str) {
 function sanitizeUrl(url) {
   if (!url) return '';
   const trimmed = url.trim();
-  // Strip control characters (including tabs, newlines)
-  const sanitized = trimmed.replace(/[^\x20-\x7E]/g, '');
+  // Strip ASCII control characters (0x00-0x1F and 0x7F) without stripping international characters
+  const sanitized = trimmed.replace(/[\x00-\x1F\x7F]/g, '');
   const lower = sanitized.toLowerCase();
   
   // Strict URL safety check: only allow http, https, relative, or fragment/hash.
@@ -920,11 +958,12 @@ if (hideNoCoverBtn) {
    ZERO-KNOWLEDGE SYNC ENGINE
    ============================================================ */
 function arrayBufferToBase64(buffer) {
-  let binary = '';
   const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const CHUNK_SIZE = 0x8000; // 32KB chunks prevent call stack overflow
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, i + CHUNK_SIZE);
+    binary += String.fromCharCode.apply(null, chunk);
   }
   return window.btoa(binary);
 }
@@ -1203,11 +1242,27 @@ async function syncData(manual = false) {
         }
         
         let mergedProgress = { ...settings.progress };
-        for (const [id, cArr] of Object.entries(cleanCloudProgress)) {
-          if (!mergedProgress[id]) {
-            mergedProgress[id] = cArr;
+        for (const [id, cEntry] of Object.entries(cleanCloudProgress)) {
+          const localEntry = mergedProgress[id];
+          if (!localEntry) {
+            mergedProgress[id] = cEntry;
           } else {
-            mergedProgress[id] = [...new Set([...mergedProgress[id], ...cArr])];
+            const localTime = (localEntry && localEntry.updatedAt) || 0;
+            const cloudTime = (cEntry && cEntry.updatedAt) || 0;
+            const localVols = Array.isArray(localEntry) ? localEntry : (localEntry.readVolumes || []);
+            const cloudVols = Array.isArray(cEntry) ? cEntry : (cEntry.readVolumes || []);
+
+            if (cloudTime > localTime) {
+              mergedProgress[id] = {
+                readVolumes: cloudVols,
+                updatedAt: cloudTime
+              };
+            } else if (cloudTime === localTime) {
+              mergedProgress[id] = {
+                readVolumes: [...new Set([...localVols, ...cloudVols])],
+                updatedAt: localTime
+              };
+            }
           }
         }
         
@@ -1246,7 +1301,7 @@ async function syncData(manual = false) {
 }
 
 function generateRandomKey() {
-  const array = new Uint8Array(8);
+  const array = new Uint8Array(16); // 16 bytes = 128 bits cryptographic entropy
   window.crypto.getRandomValues(array);
   return Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
 }
@@ -1563,6 +1618,9 @@ grid.addEventListener('click', (e) => {
 grid.addEventListener('error', (e) => {
   if (e.target.classList.contains('novel-cover-img')) {
     const img = e.target;
+    if (img.dataset.fallbackApplied) return;
+    img.dataset.fallbackApplied = 'true';
+
     const card = img.closest('.novel-card');
     if (card) {
       const novelId = card.dataset.id;
@@ -1576,6 +1634,10 @@ grid.addEventListener('error', (e) => {
       }
     }
     img.src = 'https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover';
+    img.onerror = () => {
+      img.onerror = null;
+      img.src = NO_COVER_PLACEHOLDER;
+    };
   }
 }, true); // Use capture phase because error events do not bubble
 
@@ -1652,7 +1714,14 @@ modalBody.addEventListener('change', (e) => {
 
 modalBody.addEventListener('error', (e) => {
   if (e.target.classList.contains('modal-cover')) {
-    e.target.src = 'https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover';
+    const img = e.target;
+    if (img.dataset.fallbackApplied) return;
+    img.dataset.fallbackApplied = 'true';
+    img.src = 'https://placehold.co/300x400/1a1a2e/a0aab2?text=No+Cover';
+    img.onerror = () => {
+      img.onerror = null;
+      img.src = NO_COVER_PLACEHOLDER;
+    };
   }
 }, true); // Use capture phase because error events do not bubble
 

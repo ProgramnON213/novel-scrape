@@ -364,12 +364,12 @@ All design tokens live in the `:root` block of `style.css`:
   - Search sorting implements list partitioning (reading vs other novels) in a single traversal.
   - Constant variables (`DEFAULT_LIB_ENTRY`, `EMPTY_ARRAY`) are frozen to avoid runtime object allocations in hot paths.
   - Camera QR scanner downscales input frames (max 600px) before processing via `jsQR` to eliminate scanning lag.
-- **Security & Sanitization:** All dynamic content is HTML-escaped (`escapeHTML()` / `escapeSynopsis()`). Link URLs are robustly sanitized by stripping non-printable control characters and blocking harmful protocols (`javascript:`, `data:`, and `vbscript:`).
+- **Security & Sanitization:** All dynamic content is HTML-escaped (`escapeHTML()` / `escapeSynopsis()`). Link URLs are robustly sanitized by stripping non-printable control characters and blocking harmful protocols (`javascript:`, `data:`, and `vbscript:`). Local backups isolate credentials by excluding `syncKey` and Supabase keys. Missing or broken covers fall back to an inline SVG with re-entrancy protection.
 - **Database Synchronization**:
   - `sync-novels.js` and `sync-animestuff.js` manage database integrity.
+  - Title normalization uses Unicode-aware regex (`[\p{P}\p{S}\s]+/gu`) to properly handle multi-lingual titles and prevent map collisions.
   - They perform network validation for `cover` and `sourceUrl` fields. 
   - `sync-animestuff` supports intelligent merging of updates: if a title exists, it will update the `sourceUrl` and `cover` if the incoming data provides a different, valid network link.
-  - All modified entries are flagged with `newUpdate: 'yes'` to inform the UI.
 - **No state management library** — mutable module-level variables (`novelsData`, `tagStates`, `activeLibFilter`) serve as the store.
 - **`import.meta.env.BASE_URL`** is used when fetching `data.json`, so it works correctly under any Vite `base` path.
 - **Personalization state** lives in a single `settings` object (`LS_SETTINGS_KEY = 'novel_settings'`) and is persisted to `localStorage`. All user data is keyed by `novel.id` (string) so it remains valid regardless of changes to `data.json`.
@@ -377,6 +377,21 @@ All design tokens live in the `:root` block of `style.css`:
 - **Backup schema** is a plain JSON object with `version`, `library`, `progress`, and `theme` keys. The importer validates for `library` and `progress` keys before applying.
 - **Sync flow:** settings are AES-GCM encrypted client-side using a SHA-256 hash of the Sync Key as both the encryption key and the Supabase row ID. All Supabase calls go through secure `SECURITY DEFINER` RPC functions (`get_sync_data` / `set_sync_data`); no direct table access is permitted. An `isSyncing` boolean lock prevents overlapping sync operations.
 - **QR codes** are generated locally using the bundled `qrious` library — no external requests are made, so the Sync Key is never sent to a third-party service.
+
+---
+
+## 📚 Documentation & Architecture Decision Records (ADRs)
+
+- [User Guide](file:///d:/Download/novel-scrape/docs/user-guide.md) — End-user guide for search, tags, offline library, cloud sync, and backups.
+- [Data Maintenance Guide](file:///d:/Download/novel-scrape/docs/data-maintenance-guide.md) — Operations guide for database scraping, synchronization, and cleansing.
+- [Architecture Guide](file:///d:/Download/novel-scrape/docs/architecture.md) — Technical specifications, state flow, performance optimizations, and security contracts.
+- **Architecture Decision Records**:
+  - [ADR-001: Framework-less Single Module Architecture](file:///d:/Download/novel-scrape/docs/decisions/0001-frameworkless-single-module-architecture.md)
+  - [ADR-002: Zero-Knowledge AES-GCM Encryption with Supabase Sync](file:///d:/Download/novel-scrape/docs/decisions/0002-zero-knowledge-aes-gcm-supabase-sync.md)
+  - [ADR-003: Id-Keyed Progress Tracking Schema](file:///d:/Download/novel-scrape/docs/decisions/0003-id-keyed-progress-tracking-schema.md)
+  - [ADR-004: Genre Schema Normalization & Multi-Source Sync Pipeline](file:///d:/Download/novel-scrape/docs/decisions/0004-genre-schema-and-multi-source-sync.md)
+  - [ADR-005: Branding Identity, Source Attribution & 90-Day Link Caching](file:///d:/Download/novel-scrape/docs/decisions/0005-branding-identity-and-long-term-link-caching.md)
+  - [ADR-006: Unicode-Aware Sync Normalization, Offline Progress Tracking, and Credential Isolation](file:///d:/Download/novel-scrape/docs/decisions/0006-unicode-sync-offline-progress-credential-isolation.md)
 
 
 ---

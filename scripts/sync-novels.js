@@ -223,7 +223,10 @@ async function run() {
     if (novel.id) idMap.set(novel.id, index);
     if (novel.title) {
       titleMap.set(novel.title.trim(), index);
-      normalizedTitleMap.set(normalizeString(novel.title), index);
+      const norm = normalizeString(novel.title);
+      if (norm) {
+        normalizedTitleMap.set(norm, index);
+      }
     }
   });
 
@@ -244,8 +247,11 @@ async function run() {
       mainIndex = titleMap.get(newNovel.title.trim());
     } 
     // 3. Try matching by normalized title
-    else if (newNovel.title && normalizedTitleMap.has(normalizeString(newNovel.title))) {
-      mainIndex = normalizedTitleMap.get(normalizeString(newNovel.title));
+    else if (newNovel.title) {
+      const norm = normalizeString(newNovel.title);
+      if (norm && normalizedTitleMap.has(norm)) {
+        mainIndex = normalizedTitleMap.get(norm);
+      }
     }
 
     const existingNovel = mainIndex !== -1 ? mainDb[mainIndex] : null;
@@ -345,10 +351,15 @@ async function run() {
       const mergedVols = [...existingVols];
 
       newVols.forEach(newVol => {
-        // Look for matching volume by normalized title
-        const existingVolIdx = mergedVols.findIndex(
-          ev => normalizeString(ev.title) === normalizeString(newVol.title)
-        );
+        const normNew = normalizeString(newVol.title);
+        // Look for matching volume by normalized title (or exact trimmed title if normalization is empty)
+        const existingVolIdx = mergedVols.findIndex(ev => {
+          const normEv = normalizeString(ev.title);
+          if (normEv && normNew) {
+            return normEv === normNew;
+          }
+          return (ev.title || '').trim().toLowerCase() === (newVol.title || '').trim().toLowerCase();
+        });
 
         if (existingVolIdx === -1) {
           // New volume added
@@ -555,7 +566,6 @@ async function run() {
       // Update volumes and count
       existing.volumes = u.mergedVols;
       existing.volumesCount = String(u.mergedVols.length);
-      existing.newUpdate = 'yes'; // flag it as recently updated
     });
 
     // Add new novels
@@ -564,7 +574,6 @@ async function run() {
       const newNovelWithId = {
         ...n,
         id: n.id || formatId(nextIdVal++),
-        newUpdate: 'yes',
         volumesCount: String(n.volumes ? n.volumes.length : 0)
       };
       updatedDb.unshift(newNovelWithId); // add to top so it shows up in main grid
